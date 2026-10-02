@@ -7,6 +7,9 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Please provide a name'],
       trim: true,
+      minlength: [2, 'Name must be at least 2 characters long'],
+      maxlength: [50, 'Name cannot exceed 50 characters'],
+      match: [/^[A-Za-z][A-Za-z .'-]{1,49}$/, 'Name must contain only letters, spaces, dots, hyphens, or apostrophes'],
     },
     email: {
       type: String,
@@ -14,17 +17,26 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
+      maxlength: [100, 'Email cannot exceed 100 characters'],
+      match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Please enter a valid email address'],
     },
     password: {
       type: String,
       required: [true, 'Please provide a password'],
-      minlength: [6, 'Password must be at least 6 characters'],
+      minlength: [8, 'Password must be at least 8 characters long'],
       select: false,
     },
     phone: {
       type: String,
       trim: true,
       default: '',
+      validate: {
+        validator: function (v) {
+          if (!v) return true; // optional
+          return /^[6-9][0-9]{9}$/.test(v);
+        },
+        message: 'Phone number must be exactly 10 digits and start with 6, 7, 8, or 9.',
+      },
     },
     role: {
       type: String,

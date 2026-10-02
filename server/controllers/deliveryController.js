@@ -13,6 +13,15 @@ const {
   isDispatcher,
 } = require('../utils/roles');
 const { recordAuditLog } = require('../utils/auditLogger');
+const {
+  validateName,
+  validatePhone,
+  validateAddress,
+  validateAmount,
+  validateTextLength,
+  sanitizeSearchQuery,
+  sendValidationError,
+} = require('../utils/validation');
 
 // Helper to find driver linked to a user with role DRIVER
 const getLinkedDriverId = async (user) => {
@@ -95,12 +104,15 @@ exports.getDeliveries = async (req, res, next) => {
 
     // Search filter
     if (req.query.search) {
-      filter.$or = [
-        { orderId: { $regex: req.query.search, $options: 'i' } },
-        { customerName: { $regex: req.query.search, $options: 'i' } },
-        { customerPhone: { $regex: req.query.search, $options: 'i' } },
-        { deliveryAddress: { $regex: req.query.search, $options: 'i' } },
-      ];
+      const cleanSearch = sanitizeSearchQuery(req.query.search);
+      if (cleanSearch) {
+        filter.$or = [
+          { orderId: { $regex: cleanSearch, $options: 'i' } },
+          { customerName: { $regex: cleanSearch, $options: 'i' } },
+          { customerPhone: { $regex: cleanSearch, $options: 'i' } },
+          { deliveryAddress: { $regex: cleanSearch, $options: 'i' } },
+        ];
+      }
     }
 
     const deliveries = await Delivery.find(filter)
@@ -213,39 +225,53 @@ exports.createDelivery = async (req, res, next) => {
       notes,
     } = req.body;
 
-    if (!customerName || !customerPhone || !deliveryAddress) {
-      return res.status(400).json({
-        success: false,
-        message: 'Customer name, phone number, and delivery address are required.',
-      });
-    }
+    const errors = {};
+
+    const nameCheck = validateName(customerName, 'Customer name', 2, 50);
+    if (!nameCheck.isValid) errors.customerName = nameCheck.error;
+
+    const phoneCheck = validatePhone(customerPhone, 'Customer phone number');
+    if (!phoneCheck.isValid) errors.customerPhone = phoneCheck.error;
+
+    const addressCheck = validateAddress(deliveryAddress, 'Delivery address', 5, 250);
+    if (!addressCheck.isValid) errors.deliveryAddress = addressCheck.error;
+
+    const amountCheck = validateAmount(amount, 'Order amount', 0, 1000000);
+    if (!amountCheck.isValid) errors.amount = amountCheck.error;
 
     if (!branchId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Branch selection is required.',
-      });
+      errors.branchId = 'Branch selection is required.';
+    }
+
+    const finalNotes = (deliveryNotes || notes || '').trim();
+    if (finalNotes.length > 250) {
+      errors.deliveryNotes = 'Delivery notes cannot exceed 250 characters.';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return sendValidationError(res, errors, Object.values(errors)[0]);
     }
 
     // Enforce branch ownership: branch must belong to clientId
     const branch = await Branch.findOne({ _id: branchId, clientId });
     if (!branch) {
-      return res.status(400).json({
-        success: false,
-        message: 'Selected branch does not belong to your client account.',
-      });
+      return sendValidationError(
+        res,
+        { branchId: 'Selected branch does not belong to your client account.' },
+        'Selected branch does not belong to your client account.'
+      );
     }
 
     // Initially driverId = null, vehicleId = null, status = REQUESTED
     const delivery = await Delivery.create({
       clientId,
       branchId,
-      customerName: customerName.trim(),
-      customerPhone: customerPhone.trim(),
-      deliveryAddress: deliveryAddress.trim(),
-      orderItems: (orderItems || 'Food Items').trim(),
-      amount: Number(amount) || 0,
-      deliveryNotes: (deliveryNotes || notes || '').trim(),
+      customerName: nameCheck.value,
+      customerPhone: phoneCheck.value,
+      deliveryAddress: addressCheck.value,
+      orderItems: (orderItems || 'Food Items').trim().slice(0, 500),
+      amount: amountCheck.value,
+      deliveryNotes: finalNotes,
       driverId: null,
       vehicleId: null,
       status: 'REQUESTED',
@@ -527,6 +553,13 @@ exports.acceptDelivery = async (req, res, next) => {
 // @access  Private (DRIVER, SUPER_ADMIN, ADMIN)
 exports.rejectDelivery = async (req, res, next) => {
   try {
+    const rawReason = req.body.reason || req.body.rejectionReason;
+    const reasonCheck = validateTextLength(rawReason, 'Rejection reason', 3, 250, true);
+    if (!reasonCheck.isValid) {
+      return sendValidationError(res, { reason: reasonCheck.error }, reasonCheck.error);
+    }
+    const reason = reasonCheck.value;
+
     const delivery = await Delivery.findById(req.params.id);
     if (!delivery) {
       return res.status(404).json({ success: false, message: 'Delivery not found.' });
@@ -553,8 +586,6 @@ exports.rejectDelivery = async (req, res, next) => {
         });
       }
     }
-
-    const reason = req.body.reason || req.body.rejectionReason || 'Driver unavailable';
     const driverId = delivery.driverId;
     const vehicleId = delivery.vehicleId;
 
@@ -767,8 +798,12 @@ exports.updateDeliveryStatus = async (req, res, next) => {
 // @access  Private (SUPER_ADMIN, ADMIN, DISPATCHER, CLIENT)
 exports.cancelDelivery = async (req, res, next) => {
   try {
-    const { cancellationReason, reason } = req.body;
-    const finalReason = (cancellationReason || reason || 'Cancelled by user').trim();
+    const rawReason = req.body.cancellationReason || req.body.reason;
+    const reasonCheck = validateTextLength(rawReason, 'Cancellation reason', 5, 250, true);
+    if (!reasonCheck.isValid) {
+      return sendValidationError(res, { cancellationReason: reasonCheck.error }, reasonCheck.error);
+    }
+    const finalReason = reasonCheck.value;
 
     const delivery = await Delivery.findById(req.params.id);
     if (!delivery) {

@@ -200,6 +200,7 @@ const DeliveriesPage = () => {
             <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
+              maxLength={100}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by order ID, customer, address..."

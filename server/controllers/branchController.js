@@ -1,6 +1,15 @@
 const Branch = require('../models/Branch');
+const Client = require('../models/Client');
 const { isClient } = require('../utils/roles');
 const { recordAuditLog } = require('../utils/auditLogger');
+const {
+  validateName,
+  validatePhone,
+  validateAddress,
+  validatePincode,
+  validateEnum,
+  sendValidationError,
+} = require('../utils/validation');
 
 // @desc    Get all branches (tenant isolated)
 // @route   GET /api/v1/branches or GET /api/branches
@@ -67,22 +76,58 @@ exports.getBranch = async (req, res, next) => {
 // @access  Private (SUPER_ADMIN, ADMIN, CLIENT)
 exports.createBranch = async (req, res, next) => {
   try {
+    const { name, address, phone, contactPerson, city, state, pincode, status } = req.body;
     let clientId = req.body.clientId;
 
     if (isClient(req.user.role)) {
       clientId = req.user.clientId;
     }
 
+    const errors = {};
+
+    const nameCheck = validateName(name, 'Branch name', 2, 100);
+    if (!nameCheck.isValid) errors.name = nameCheck.error;
+
+    const phoneCheck = validatePhone(phone, 'Branch phone number');
+    if (!phoneCheck.isValid) errors.phone = phoneCheck.error;
+
+    const addressCheck = validateAddress(address, 'Branch address');
+    if (!addressCheck.isValid) errors.address = addressCheck.error;
+
+    if (pincode && String(pincode).trim()) {
+      const pinCheck = validatePincode(pincode, 'Pincode');
+      if (!pinCheck.isValid) errors.pincode = pinCheck.error;
+    }
+
     if (!clientId) {
-      return res.status(400).json({ success: false, message: 'Client ID is required' });
+      errors.clientId = 'Client ID is required.';
+    }
+
+    if (status) {
+      const statusCheck = validateEnum(status, ['ACTIVE', 'INACTIVE'], 'Status');
+      if (!statusCheck.isValid) errors.status = statusCheck.error;
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return sendValidationError(res, errors, Object.values(errors)[0]);
+    }
+
+    // Verify client exists
+    const client = await Client.findById(clientId);
+    if (!client) {
+      return sendValidationError(res, { clientId: 'Client not found.' }, 'Client not found.');
     }
 
     const branch = await Branch.create({
-      name: req.body.name,
+      name: nameCheck.value,
       clientId,
-      address: req.body.address,
-      phone: req.body.phone,
-      status: req.body.status || 'ACTIVE',
+      address: addressCheck.value,
+      phone: phoneCheck.value,
+      contactPerson: contactPerson ? contactPerson.trim() : undefined,
+      city: city ? city.trim() : undefined,
+      state: state ? state.trim() : undefined,
+      pincode: pincode ? String(pincode).trim() : undefined,
+      status: status || 'ACTIVE',
     });
 
     await recordAuditLog({
@@ -121,7 +166,63 @@ exports.updateBranch = async (req, res, next) => {
       }
     }
 
-    branch = await Branch.findByIdAndUpdate(req.params.id, req.body, {
+    const { name, address, phone, status } = req.body;
+    const errors = {};
+    const updates = {};
+
+    if (name !== undefined) {
+      const nameCheck = validateName(name, 'Branch name', 2, 100);
+      if (!nameCheck.isValid) errors.name = nameCheck.error;
+      else updates.name = nameCheck.value;
+    }
+
+    if (phone !== undefined) {
+      const phoneCheck = validatePhone(phone, 'Branch phone number');
+      if (!phoneCheck.isValid) errors.phone = phoneCheck.error;
+      else updates.phone = phoneCheck.value;
+    }
+
+    if (address !== undefined) {
+      const addressCheck = validateAddress(address, 'Branch address');
+      if (!addressCheck.isValid) errors.address = addressCheck.error;
+      else updates.address = addressCheck.value;
+    }
+
+    if (req.body.pincode !== undefined) {
+      if (req.body.pincode && String(req.body.pincode).trim()) {
+        const pinCheck = validatePincode(req.body.pincode, 'Pincode');
+        if (!pinCheck.isValid) errors.pincode = pinCheck.error;
+        else updates.pincode = pinCheck.value;
+      } else {
+        updates.pincode = '';
+      }
+    }
+
+    if (req.body.contactPerson !== undefined) updates.contactPerson = req.body.contactPerson.trim();
+    if (req.body.city !== undefined) updates.city = req.body.city.trim();
+    if (req.body.state !== undefined) updates.state = req.body.state.trim();
+
+    if (status !== undefined) {
+      const statusCheck = validateEnum(status, ['ACTIVE', 'INACTIVE'], 'Status');
+      if (!statusCheck.isValid) errors.status = statusCheck.error;
+      else updates.status = statusCheck.value;
+    }
+
+    // Clients cannot change the clientId of a branch
+    if (!isClient(req.user.role) && req.body.clientId) {
+      const client = await Client.findById(req.body.clientId);
+      if (!client) {
+        errors.clientId = 'Client not found.';
+      } else {
+        updates.clientId = req.body.clientId;
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return sendValidationError(res, errors, Object.values(errors)[0]);
+    }
+
+    branch = await Branch.findByIdAndUpdate(req.params.id, updates, {
       new: true,
       runValidators: true,
     }).populate('clientId', 'name email');

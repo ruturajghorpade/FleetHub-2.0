@@ -3,6 +3,11 @@ const Vehicle = require('../models/Vehicle');
 const { createNotification } = require('../utils/notificationHelper');
 const { isClient } = require('../utils/roles');
 const { recordAuditLog } = require('../utils/auditLogger');
+const {
+  validateTextLength,
+  validateAmount,
+  sendValidationError,
+} = require('../utils/validation');
 
 // @desc    Get all maintenance records (tenant isolated)
 // @route   GET /api/v1/maintenance or GET /api/maintenance
@@ -69,6 +74,22 @@ exports.getMaintenance = async (req, res, next) => {
 exports.createMaintenance = async (req, res, next) => {
   try {
     const { vehicleId, description, startDate, cost } = req.body;
+    const errors = {};
+
+    if (!vehicleId) {
+      errors.vehicleId = 'Vehicle selection is required.';
+    }
+
+    const descCheck = validateTextLength(description, 'Maintenance description', 5, 250, true);
+    if (!descCheck.isValid) errors.description = descCheck.error;
+
+    const costVal = cost !== undefined && cost !== '' ? cost : 0;
+    const costCheck = validateAmount(costVal, 'Maintenance cost', 0, 10000000);
+    if (!costCheck.isValid) errors.cost = costCheck.error;
+
+    if (Object.keys(errors).length > 0) {
+      return sendValidationError(res, errors, Object.values(errors)[0]);
+    }
 
     const vehicle = await Vehicle.findById(vehicleId);
     if (!vehicle) {
@@ -87,10 +108,10 @@ exports.createMaintenance = async (req, res, next) => {
     const maintenance = await Maintenance.create({
       vehicleId,
       clientId,
-      description,
+      description: descCheck.value,
       startDate: startDate || Date.now(),
       status: 'IN_PROGRESS',
-      cost: cost ? Number(cost) : 0,
+      cost: costCheck.value,
     });
 
     vehicle.status = 'MAINTENANCE';

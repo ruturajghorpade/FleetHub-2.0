@@ -3,6 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import Modal from '../common/Modal';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import {
+  validateName,
+  validatePhone,
+  validateAddress,
+  validateAmount,
+  validateRequired,
+  validateTextLength,
+  formatPhoneInput,
+} from '../../utils/validation';
 
 const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
   const { user } = useAuth();
@@ -11,6 +20,7 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const [formData, setFormData] = useState({
     customerName: '',
@@ -25,6 +35,7 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
   useEffect(() => {
     if (isOpen) {
       setError('');
+      setFieldErrors({});
       fetchBranches();
     }
   }, [isOpen]);
@@ -36,7 +47,6 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
       const branchList = res.data?.data || res.data || [];
       if (Array.isArray(branchList) && branchList.length > 0) {
         setBranches(branchList);
-        // Default to first branch if not already set or invalid
         setFormData((prev) => ({
           ...prev,
           branchId:
@@ -57,19 +67,80 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (name === 'customerPhone') {
+      const formatted = formatPhoneInput(value);
+      setFormData((prev) => ({ ...prev, [name]: formatted }));
+      if (fieldErrors[name]) {
+        setFieldErrors((prev) => ({ ...prev, [name]: '' }));
+      }
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }));
+      if (fieldErrors[name]) {
+        setFieldErrors((prev) => ({ ...prev, [name]: '' }));
+      }
+    }
+  };
+
+  const handleBlur = (e) => {
+    const { name, value } = e.target;
+    let fieldErr = null;
+
+    if (name === 'customerName') {
+      fieldErr = validateName(value, 'Customer Name');
+    } else if (name === 'customerPhone') {
+      fieldErr = validatePhone(value);
+    } else if (name === 'deliveryAddress') {
+      fieldErr = validateAddress(value);
+    } else if (name === 'amount') {
+      fieldErr = validateAmount(value, 'Order amount', 1);
+    } else if (name === 'deliveryNotes' && value.trim()) {
+      fieldErr = validateTextLength(value, 'Delivery notes', 0, 250);
+    }
+
+    if (fieldErr) {
+      setFieldErrors((prev) => ({ ...prev, [name]: fieldErr }));
+    }
   };
 
   const handleQuickFill = () => {
     setFormData((prev) => ({
       ...prev,
       customerName: 'Ruturaj Sandip Ghorpade',
-      customerPhone: '+917709176186',
-      deliveryAddress: 'Pawarwadi',
-      orderItems: 'Pizza',
+      customerPhone: '7709176186',
+      deliveryAddress: 'Pawarwadi, Near Ganpati Temple',
+      orderItems: 'Pizza & Garlic Bread',
       amount: '299',
       branchId: prev.branchId || (branches.length > 0 ? branches[0]._id : ''),
+      deliveryNotes: 'Please ring bell and leave with security',
     }));
+    setFieldErrors({});
+    setError('');
+  };
+
+  const validateAll = () => {
+    const errors = {};
+    const nameErr = validateName(formData.customerName, 'Customer Name');
+    if (nameErr) errors.customerName = nameErr;
+
+    const phoneErr = validatePhone(formData.customerPhone);
+    if (phoneErr) errors.customerPhone = phoneErr;
+
+    const addrErr = validateAddress(formData.deliveryAddress);
+    if (addrErr) errors.deliveryAddress = addrErr;
+
+    const branchErr = validateRequired(formData.branchId, 'Dispatch branch');
+    if (branchErr) errors.branchId = branchErr;
+
+    const amountErr = validateAmount(formData.amount, 'Order amount', 1);
+    if (amountErr) errors.amount = amountErr;
+
+    if (formData.deliveryNotes?.trim()) {
+      const noteErr = validateTextLength(formData.deliveryNotes, 'Delivery notes', 0, 250);
+      if (noteErr) errors.deliveryNotes = noteErr;
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleSubmit = async (e) => {
@@ -77,18 +148,8 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
     if (submitting) return;
     setError('');
 
-    if (!formData.customerName || !formData.customerPhone || !formData.deliveryAddress) {
-      setError('Customer Name, Phone, and Delivery Address are required.');
-      return;
-    }
-
-    if (!formData.branchId) {
-      setError('Please select an authorized branch.');
-      return;
-    }
-
-    if (!formData.amount || Number(formData.amount) <= 0) {
-      setError('Please enter a valid order amount.');
+    if (!validateAll()) {
+      setError('Please fix the errors indicated below.');
       return;
     }
 
@@ -104,19 +165,15 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
         deliveryNotes: formData.deliveryNotes.trim(),
       };
 
-      console.log('SUBMITTING DELIVERY PAYLOAD:', payload);
       const res = await api.post('/deliveries', payload);
-      console.log('CREATE DELIVERY RAW RESPONSE:', res);
-
-      // Support 200, 201, 204 HTTP status codes and res.data.success or res.success
       const isSuccess =
-        (res.status >= 200 && res.status < 300) &&
+        res.status >= 200 &&
+        res.status < 300 &&
         (res.data ? res.data.success !== false : true);
 
       if (isSuccess) {
         const createdDelivery = res.data?.data || res.data || res;
 
-        // Reset form
         setFormData({
           customerName: '',
           customerPhone: '',
@@ -126,13 +183,12 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
           branchId: branches[0]?._id || '',
           deliveryNotes: '',
         });
+        setFieldErrors({});
 
-        // Close modal
         if (typeof onClose === 'function') {
           onClose();
         }
 
-        // Safely invoke callback(s) so any errors in callers do not bubble into creation error
         if (typeof onCreated === 'function') {
           try {
             onCreated(createdDelivery);
@@ -151,6 +207,9 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
         const failureMsg =
           res.data?.message || res.message || 'Failed to create delivery. Please try again.';
         setError(failureMsg);
+        if (res.data?.errors) {
+          setFieldErrors(res.data.errors);
+        }
       }
     } catch (err) {
       console.error('Error creating delivery:', err);
@@ -163,6 +222,9 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
           ? 'Server error. Please try again.'
           : err.message || 'Failed to create delivery. Please try again.');
       setError(backendMessage);
+      if (err.response?.data?.errors) {
+        setFieldErrors(err.response.data.errors);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -199,10 +261,19 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
             name="customerName"
             value={formData.customerName}
             onChange={handleChange}
-            placeholder="e.g. Ruturaj Sandip Ghorpade"
+            onBlur={handleBlur}
+            maxLength={50}
+            placeholder="e.g. Rahul Patil"
             required
-            className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors"
+            className={`w-full bg-dark-900 border ${
+              fieldErrors.customerName
+                ? 'border-rose-500 focus:border-rose-500'
+                : 'border-dark-700 focus:border-amber-500'
+            } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors`}
           />
+          {fieldErrors.customerName && (
+            <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.customerName}</p>
+          )}
         </div>
 
         {/* Customer Phone */}
@@ -211,14 +282,24 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
             Customer Phone <span className="text-amber-500">*</span>
           </label>
           <input
-            type="text"
+            type="tel"
             name="customerPhone"
+            inputMode="numeric"
+            maxLength={10}
             value={formData.customerPhone}
             onChange={handleChange}
-            placeholder="e.g. +917709176186"
+            onBlur={handleBlur}
+            placeholder="10-digit mobile number (e.g. 9876543210)"
             required
-            className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors"
+            className={`w-full bg-dark-900 border ${
+              fieldErrors.customerPhone
+                ? 'border-rose-500 focus:border-rose-500'
+                : 'border-dark-700 focus:border-amber-500'
+            } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors font-mono`}
           />
+          {fieldErrors.customerPhone && (
+            <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.customerPhone}</p>
+          )}
         </div>
 
         {/* Delivery Address */}
@@ -229,12 +310,21 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
           <textarea
             name="deliveryAddress"
             rows="2"
+            maxLength={250}
             value={formData.deliveryAddress}
             onChange={handleChange}
-            placeholder="e.g. Pawarwadi"
+            onBlur={handleBlur}
+            placeholder="Complete address (e.g. Flat 402, Green Valley Apartments, Pawarwadi)"
             required
-            className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors resize-none"
+            className={`w-full bg-dark-900 border ${
+              fieldErrors.deliveryAddress
+                ? 'border-rose-500 focus:border-rose-500'
+                : 'border-dark-700 focus:border-amber-500'
+            } rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors resize-none`}
           />
+          {fieldErrors.deliveryAddress && (
+            <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.deliveryAddress}</p>
+          )}
         </div>
 
         {/* Branch Selection */}
@@ -265,8 +355,13 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
               name="branchId"
               value={formData.branchId}
               onChange={handleChange}
+              onBlur={handleBlur}
               required
-              className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 transition-colors"
+              className={`w-full bg-dark-900 border ${
+                fieldErrors.branchId
+                  ? 'border-rose-500 focus:border-rose-500'
+                  : 'border-dark-700 focus:border-amber-500'
+              } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none transition-colors`}
             >
               {branches.map((b) => (
                 <option key={b._id} value={b._id}>
@@ -274,6 +369,9 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
                 </option>
               ))}
             </select>
+          )}
+          {fieldErrors.branchId && (
+            <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.branchId}</p>
           )}
         </div>
 
@@ -284,6 +382,7 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
             <input
               type="text"
               name="orderItems"
+              maxLength={150}
               value={formData.orderItems}
               onChange={handleChange}
               placeholder="e.g. Pizza"
@@ -300,10 +399,18 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
               min="1"
               value={formData.amount}
               onChange={handleChange}
+              onBlur={handleBlur}
               placeholder="299"
               required
-              className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors"
+              className={`w-full bg-dark-900 border ${
+                fieldErrors.amount
+                  ? 'border-rose-500 focus:border-rose-500'
+                  : 'border-dark-700 focus:border-amber-500'
+              } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors`}
             />
+            {fieldErrors.amount && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.amount}</p>
+            )}
           </div>
         </div>
 
@@ -313,11 +420,20 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
           <input
             type="text"
             name="deliveryNotes"
+            maxLength={250}
             value={formData.deliveryNotes}
             onChange={handleChange}
+            onBlur={handleBlur}
             placeholder="e.g. Please deliver carefully / Ring doorbell"
-            className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors"
+            className={`w-full bg-dark-900 border ${
+              fieldErrors.deliveryNotes
+                ? 'border-rose-500 focus:border-rose-500'
+                : 'border-dark-700 focus:border-amber-500'
+            } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors`}
           />
+          {fieldErrors.deliveryNotes && (
+            <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.deliveryNotes}</p>
+          )}
         </div>
 
         {/* Submit Actions */}

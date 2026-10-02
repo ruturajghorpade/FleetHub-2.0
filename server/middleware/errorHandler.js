@@ -17,14 +17,34 @@ const errorHandler = (err, req, res, next) => {
   // Mongoose duplicate key (11000)
   if (err.code === 11000) {
     const field = Object.keys(err.keyValue || {})[0] || 'field';
-    const message = `Duplicate value entered for ${field}. Please use another value.`;
-    return res.status(400).json({ success: false, message });
+    let message = `Duplicate value entered for ${field}. Please use another value.`;
+    if (field === 'email') message = 'An account with this email already exists.';
+    if (field === 'vehicleNumber') message = 'Vehicle registration number already exists.';
+    if (field === 'licenseNumber') message = 'Driver license number already exists.';
+    if (field === 'phone') message = 'Phone number already exists in the system.';
+    if (field === 'orderId') message = 'Delivery order ID already exists.';
+
+    return res.status(400).json({
+      success: false,
+      message,
+      errors: { [field]: message },
+    });
   }
 
   // Mongoose validation error
   if (err.name === 'ValidationError') {
-    const message = Object.values(err.errors).map((val) => val.message).join(', ');
-    return res.status(400).json({ success: false, message });
+    const errors = {};
+    if (err.errors) {
+      Object.keys(err.errors).forEach((key) => {
+        errors[key] = err.errors[key].message;
+      });
+    }
+    const message = Object.values(errors)[0] || 'Validation failed';
+    return res.status(400).json({
+      success: false,
+      message,
+      errors,
+    });
   }
 
   // JWT errors

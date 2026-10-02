@@ -4,6 +4,14 @@ const Delivery = require('../models/Delivery');
 const User = require('../models/User');
 const { isPlatformAdmin, isSuperAdmin, isAdmin, isClient, isDriver } = require('../utils/roles');
 const { recordAuditLog } = require('../utils/auditLogger');
+const {
+  validateName,
+  validatePhone,
+  validateEnum,
+  validateTextLength,
+  sanitizeSearchQuery,
+  sendValidationError,
+} = require('../utils/validation');
 
 // Helper to find driver linked to a user with role DRIVER
 const getLinkedDriverId = async (user) => {
@@ -56,11 +64,14 @@ exports.getDrivers = async (req, res, next) => {
     }
 
     if (req.query.search) {
-      filter.$or = [
-        { name: { $regex: req.query.search, $options: 'i' } },
-        { phone: { $regex: req.query.search, $options: 'i' } },
-        { licenseNumber: { $regex: req.query.search, $options: 'i' } },
-      ];
+      const cleanSearch = sanitizeSearchQuery(req.query.search);
+      if (cleanSearch) {
+        filter.$or = [
+          { name: { $regex: cleanSearch, $options: 'i' } },
+          { phone: { $regex: cleanSearch, $options: 'i' } },
+          { licenseNumber: { $regex: cleanSearch, $options: 'i' } },
+        ];
+      }
     }
 
     const drivers = await Driver.find(filter)
@@ -134,12 +145,48 @@ exports.createDriver = async (req, res, next) => {
     }
 
     let { name, phone, licenseNumber, branchId, clientId, status } = req.body;
+    const errors = {};
 
-    if (!name || !phone || !licenseNumber) {
-      return res.status(400).json({
-        success: false,
-        message: 'Name, phone number, and driving license number are required.',
-      });
+    const nameCheck = validateName(name, 'Driver name', 2, 50);
+    if (!nameCheck.isValid) errors.name = nameCheck.error;
+
+    const phoneCheck = validatePhone(phone, 'Driver phone number');
+    if (!phoneCheck.isValid) errors.phone = phoneCheck.error;
+
+    const licenseCheck = validateTextLength(licenseNumber, 'Driving license number', 5, 30);
+    if (!licenseCheck.isValid) errors.licenseNumber = licenseCheck.error;
+
+    const allowedStatuses = ['AVAILABLE', 'ASSIGNED', 'BUSY', 'ON_BREAK', 'OFF_DUTY', 'INACTIVE'];
+    if (status) {
+      const statusCheck = validateEnum(status, allowedStatuses, 'Driver status');
+      if (!statusCheck.isValid) errors.status = statusCheck.error;
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return sendValidationError(res, errors, Object.values(errors)[0]);
+    }
+
+    const formattedLicense = licenseCheck.value.toUpperCase();
+    const cleanPhone = phoneCheck.value;
+
+    // Check duplicate license number
+    const existingLicense = await Driver.findOne({ licenseNumber: formattedLicense });
+    if (existingLicense) {
+      return sendValidationError(
+        res,
+        { licenseNumber: `Driver with license number "${formattedLicense}" already exists.` },
+        `Driver with license number "${formattedLicense}" already exists.`
+      );
+    }
+
+    // Check duplicate phone
+    const existingPhone = await Driver.findOne({ phone: cleanPhone });
+    if (existingPhone) {
+      return sendValidationError(
+        res,
+        { phone: `Driver with phone number "${cleanPhone}" already exists.` },
+        `Driver with phone number "${cleanPhone}" already exists.`
+      );
     }
 
     // If branch is provided without explicit clientId, resolve client from branch if available
@@ -150,31 +197,12 @@ exports.createDriver = async (req, res, next) => {
       }
     }
 
-    // Check duplicate license number
-    const formattedLicense = licenseNumber.toUpperCase().trim();
-    const existingLicense = await Driver.findOne({ licenseNumber: formattedLicense });
-    if (existingLicense) {
-      return res.status(409).json({
-        success: false,
-        message: `Driver with license number "${formattedLicense}" already exists.`,
-      });
-    }
-
-    // Check duplicate phone
-    const existingPhone = await Driver.findOne({ phone: phone.trim() });
-    if (existingPhone) {
-      return res.status(409).json({
-        success: false,
-        message: `Driver with phone number "${phone}" already exists.`,
-      });
-    }
-
     const driver = await Driver.create({
-      name: name.trim(),
-      phone: phone.trim(),
+      name: nameCheck.value,
+      phone: cleanPhone,
       licenseNumber: formattedLicense,
-      clientId,
-      branchId,
+      clientId: clientId || null,
+      branchId: branchId || null,
       status: status || 'AVAILABLE',
     });
 
@@ -231,45 +259,78 @@ exports.updateDriver = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Driver not found.' });
     }
 
-    // Check duplicate license number if updated
-    if (req.body.licenseNumber) {
-      const formattedLicense = req.body.licenseNumber.toUpperCase().trim();
-      const duplicateLicense = await Driver.findOne({
-        licenseNumber: formattedLicense,
-        _id: { $ne: driver._id },
-      });
-      if (duplicateLicense) {
-        return res.status(409).json({
-          success: false,
-          message: `Driver with license number "${formattedLicense}" already exists.`,
-        });
-      }
-      req.body.licenseNumber = formattedLicense;
+    const errors = {};
+    const updates = {};
+
+    if (req.body.name !== undefined) {
+      const nameCheck = validateName(req.body.name, 'Driver name', 2, 50);
+      if (!nameCheck.isValid) errors.name = nameCheck.error;
+      else updates.name = nameCheck.value;
     }
 
-    // Check duplicate phone if updated
-    if (req.body.phone) {
-      const duplicatePhone = await Driver.findOne({
-        phone: req.body.phone.trim(),
-        _id: { $ne: driver._id },
-      });
-      if (duplicatePhone) {
-        return res.status(409).json({
-          success: false,
-          message: `Driver with phone number "${req.body.phone}" already exists.`,
+    if (req.body.phone !== undefined) {
+      const phoneCheck = validatePhone(req.body.phone, 'Driver phone number');
+      if (!phoneCheck.isValid) {
+        errors.phone = phoneCheck.error;
+      } else {
+        const cleanPhone = phoneCheck.value;
+        const duplicatePhone = await Driver.findOne({
+          phone: cleanPhone,
+          _id: { $ne: driver._id },
         });
+        if (duplicatePhone) {
+          errors.phone = `Driver with phone number "${cleanPhone}" already exists.`;
+        } else {
+          updates.phone = cleanPhone;
+        }
       }
+    }
+
+    if (req.body.licenseNumber !== undefined) {
+      const licenseCheck = validateTextLength(req.body.licenseNumber, 'Driving license number', 5, 30);
+      if (!licenseCheck.isValid) {
+        errors.licenseNumber = licenseCheck.error;
+      } else {
+        const formattedLicense = licenseCheck.value.toUpperCase();
+        const duplicateLicense = await Driver.findOne({
+          licenseNumber: formattedLicense,
+          _id: { $ne: driver._id },
+        });
+        if (duplicateLicense) {
+          errors.licenseNumber = `Driver with license number "${formattedLicense}" already exists.`;
+        } else {
+          updates.licenseNumber = formattedLicense;
+        }
+      }
+    }
+
+    const allowedStatuses = ['AVAILABLE', 'ASSIGNED', 'BUSY', 'ON_BREAK', 'OFF_DUTY', 'INACTIVE'];
+    if (req.body.status !== undefined) {
+      const statusCheck = validateEnum(req.body.status, allowedStatuses, 'Driver status');
+      if (!statusCheck.isValid) errors.status = statusCheck.error;
+      else updates.status = statusCheck.value;
+    }
+
+    if (req.body.branchId !== undefined) {
+      updates.branchId = req.body.branchId || null;
+    }
+    if (req.body.clientId !== undefined) {
+      updates.clientId = req.body.clientId || null;
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return sendValidationError(res, errors, Object.values(errors)[0]);
     }
 
     // If branch is provided without explicit clientId, resolve client from branch
-    if (req.body.branchId && !req.body.clientId) {
-      const branch = await Branch.findById(req.body.branchId);
+    if (updates.branchId && !updates.clientId) {
+      const branch = await Branch.findById(updates.branchId);
       if (branch) {
-        req.body.clientId = branch.clientId;
+        updates.clientId = branch.clientId;
       }
     }
 
-    driver = await Driver.findByIdAndUpdate(req.params.id, req.body, {
+    driver = await Driver.findByIdAndUpdate(req.params.id, updates, {
       new: true,
       runValidators: true,
     })

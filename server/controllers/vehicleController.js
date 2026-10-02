@@ -3,6 +3,14 @@ const Driver = require('../models/Driver');
 const Delivery = require('../models/Delivery');
 const { isClient, isDriver, isPlatformAdmin } = require('../utils/roles');
 const { recordAuditLog } = require('../utils/auditLogger');
+const {
+  validateVehicleNumber,
+  validateEnum,
+  validateTextLength,
+  validateNumber,
+  sanitizeSearchQuery,
+  sendValidationError,
+} = require('../utils/validation');
 
 // Helper to find driver linked to a user with role DRIVER
 const getLinkedDriverId = async (user) => {
@@ -68,10 +76,13 @@ exports.getVehicles = async (req, res, next) => {
     }
 
     if (req.query.search) {
-      filter.$or = [
-        { vehicleNumber: { $regex: req.query.search, $options: 'i' } },
-        { model: { $regex: req.query.search, $options: 'i' } },
-      ];
+      const cleanSearch = sanitizeSearchQuery(req.query.search);
+      if (cleanSearch) {
+        filter.$or = [
+          { vehicleNumber: { $regex: cleanSearch, $options: 'i' } },
+          { model: { $regex: cleanSearch, $options: 'i' } },
+        ];
+      }
     }
 
     const vehicles = await Vehicle.find(filter)
@@ -130,28 +141,49 @@ exports.createVehicle = async (req, res, next) => {
       });
     }
 
-    const { vehicleNumber, vehicleType, model, clientId, branchId, status } = req.body;
+    const { vehicleNumber, vehicleType, model, capacity, clientId, branchId, status } = req.body;
+    const errors = {};
 
-    if (!vehicleNumber || !vehicleType || !model) {
-      return res.status(400).json({
-        success: false,
-        message: 'Vehicle number, vehicle type, and model are required.',
-      });
+    const numCheck = validateVehicleNumber(vehicleNumber, 'Vehicle registration number');
+    if (!numCheck.isValid) errors.vehicleNumber = numCheck.error;
+
+    const allowedTypes = ['BIKE', 'SCOOTER', 'CAR', 'VAN'];
+    const typeCheck = validateEnum(vehicleType, allowedTypes, 'Vehicle type');
+    if (!typeCheck.isValid) errors.vehicleType = typeCheck.error;
+
+    const modelCheck = validateTextLength(model, 'Vehicle model', 2, 50);
+    if (!modelCheck.isValid) errors.model = modelCheck.error;
+
+    if (capacity !== undefined && capacity !== null && capacity !== '') {
+      const capCheck = validateNumber(capacity, 'Vehicle capacity', { min: 1, allowDecimal: false });
+      if (!capCheck.isValid) errors.capacity = capCheck.error;
     }
 
-    const cleanNum = vehicleNumber.toUpperCase().trim();
+    const allowedStatuses = ['AVAILABLE', 'ASSIGNED', 'IN_USE', 'MAINTENANCE', 'INACTIVE'];
+    if (status) {
+      const statusCheck = validateEnum(status, allowedStatuses, 'Vehicle status');
+      if (!statusCheck.isValid) errors.status = statusCheck.error;
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return sendValidationError(res, errors, Object.values(errors)[0]);
+    }
+
+    const cleanNum = numCheck.value;
     const existing = await Vehicle.findOne({ vehicleNumber: cleanNum });
     if (existing) {
-      return res.status(409).json({
-        success: false,
-        message: `Vehicle with registration number "${cleanNum}" already exists.`,
-      });
+      return sendValidationError(
+        res,
+        { vehicleNumber: `Vehicle with registration number "${cleanNum}" already exists.` },
+        `Vehicle with registration number "${cleanNum}" already exists.`
+      );
     }
 
     const vehicle = await Vehicle.create({
       vehicleNumber: cleanNum,
       vehicleType,
-      model: model.trim(),
+      model: modelCheck.value,
+      capacity: capacity ? Number(capacity) : 1,
       clientId: clientId || null,
       branchId: branchId || null,
       status: status || 'AVAILABLE',
@@ -196,11 +228,65 @@ exports.updateVehicle = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Vehicle not found' });
     }
 
-    if (req.body.vehicleNumber) {
-      req.body.vehicleNumber = req.body.vehicleNumber.toUpperCase().trim();
+    const errors = {};
+    const updates = {};
+
+    if (req.body.vehicleNumber !== undefined) {
+      const numCheck = validateVehicleNumber(req.body.vehicleNumber, 'Vehicle registration number');
+      if (!numCheck.isValid) {
+        errors.vehicleNumber = numCheck.error;
+      } else {
+        const cleanNum = numCheck.value;
+        const duplicate = await Vehicle.findOne({
+          vehicleNumber: cleanNum,
+          _id: { $ne: vehicle._id },
+        });
+        if (duplicate) {
+          errors.vehicleNumber = `Vehicle with registration number "${cleanNum}" already exists.`;
+        } else {
+          updates.vehicleNumber = cleanNum;
+        }
+      }
     }
 
-    vehicle = await Vehicle.findByIdAndUpdate(req.params.id, req.body, {
+    if (req.body.vehicleType !== undefined) {
+      const allowedTypes = ['BIKE', 'SCOOTER', 'CAR', 'VAN'];
+      const typeCheck = validateEnum(req.body.vehicleType, allowedTypes, 'Vehicle type');
+      if (!typeCheck.isValid) errors.vehicleType = typeCheck.error;
+      else updates.vehicleType = req.body.vehicleType;
+    }
+
+    if (req.body.model !== undefined) {
+      const modelCheck = validateTextLength(req.body.model, 'Vehicle model', 2, 50);
+      if (!modelCheck.isValid) errors.model = modelCheck.error;
+      else updates.model = modelCheck.value;
+    }
+
+    if (req.body.capacity !== undefined && req.body.capacity !== null && req.body.capacity !== '') {
+      const capCheck = validateNumber(req.body.capacity, 'Vehicle capacity', { min: 1, allowDecimal: false });
+      if (!capCheck.isValid) errors.capacity = capCheck.error;
+      else updates.capacity = Number(req.body.capacity);
+    }
+
+    if (req.body.status !== undefined) {
+      const allowedStatuses = ['AVAILABLE', 'ASSIGNED', 'IN_USE', 'MAINTENANCE', 'INACTIVE'];
+      const statusCheck = validateEnum(req.body.status, allowedStatuses, 'Vehicle status');
+      if (!statusCheck.isValid) errors.status = statusCheck.error;
+      else updates.status = req.body.status;
+    }
+
+    if (req.body.branchId !== undefined) {
+      updates.branchId = req.body.branchId || null;
+    }
+    if (req.body.clientId !== undefined) {
+      updates.clientId = req.body.clientId || null;
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return sendValidationError(res, errors, Object.values(errors)[0]);
+    }
+
+    vehicle = await Vehicle.findByIdAndUpdate(req.params.id, updates, {
       new: true,
       runValidators: true,
     })

@@ -7,6 +7,13 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorAlert from '../../components/common/ErrorAlert';
 import EmptyState from '../../components/common/EmptyState';
 import Modal from '../../components/common/Modal';
+import {
+  validatePhone,
+  validateAddress,
+  validateTextLength,
+  validateRequired,
+  formatPhoneInput,
+} from '../../utils/validation';
 
 const BranchesPage = () => {
   const { user } = useAuth();
@@ -18,6 +25,7 @@ const BranchesPage = () => {
   const [editingBranch, setEditingBranch] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const [formData, setFormData] = useState({
     name: '',
@@ -73,6 +81,7 @@ const BranchesPage = () => {
       status: 'ACTIVE',
     });
     setModalError('');
+    setFieldErrors({});
     setModalOpen(true);
   };
 
@@ -86,24 +95,63 @@ const BranchesPage = () => {
       status: branch.status,
     });
     setModalError('');
+    setFieldErrors({});
     setModalOpen(true);
+  };
+
+  const validateAll = () => {
+    const errors = {};
+    const nameErr = validateTextLength(formData.name, 'Branch name', 2, 100);
+    if (nameErr) errors.name = nameErr;
+
+    const phoneErr = validatePhone(formData.phone);
+    if (phoneErr) errors.phone = phoneErr;
+
+    const addrErr = validateAddress(formData.address);
+    if (addrErr) errors.address = addrErr;
+
+    if (isAdmin) {
+      const clientErr = validateRequired(formData.clientId, 'Client assignment');
+      if (clientErr) errors.clientId = clientErr;
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setModalError('');
+
+    if (!validateAll()) {
+      setModalError('Please fix the errors indicated below.');
+      return;
+    }
+
     try {
       setSubmitting(true);
+      const payload = {
+        name: formData.name.trim(),
+        clientId: formData.clientId,
+        address: formData.address.trim(),
+        phone: formData.phone.trim(),
+        status: formData.status,
+      };
+
       if (editingBranch) {
-        await api.put(`/branches/${editingBranch._id}`, formData);
+        await api.put(`/branches/${editingBranch._id}`, payload);
       } else {
-        await api.post('/branches', formData);
+        await api.post('/branches', payload);
       }
       setModalOpen(false);
       fetchBranches();
     } catch (err) {
       console.error('Error saving branch:', err);
-      setModalError(err.response?.data?.message || 'Failed to save branch.');
+      const msg = err.response?.data?.message || 'Failed to save branch.';
+      setModalError(msg);
+      if (err.response?.data?.errors) {
+        setFieldErrors(err.response.data.errors);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -238,12 +286,21 @@ const BranchesPage = () => {
             <label className="block text-xs font-semibold text-slate-300 mb-1">Branch Name *</label>
             <input
               type="text"
+              maxLength={100}
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, name: e.target.value });
+                if (fieldErrors.name) setFieldErrors({ ...fieldErrors, name: '' });
+              }}
               placeholder="e.g. Domino's Downtown Branch"
               required
-              className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500"
+              className={`w-full bg-dark-900 border ${
+                fieldErrors.name ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-500'
+              } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors`}
             />
+            {fieldErrors.name && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.name}</p>
+            )}
           </div>
 
           {isAdmin && (
@@ -251,16 +308,25 @@ const BranchesPage = () => {
               <label className="block text-xs font-semibold text-slate-300 mb-1">Assign to Client *</label>
               <select
                 value={formData.clientId}
-                onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, clientId: e.target.value });
+                  if (fieldErrors.clientId) setFieldErrors({ ...fieldErrors, clientId: '' });
+                }}
                 required
-                className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                className={`w-full bg-dark-900 border ${
+                  fieldErrors.clientId ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-500'
+                } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none transition-colors`}
               >
+                <option value="">Select a client...</option>
                 {clients.map((c) => (
                   <option key={c._id} value={c._id}>
                     {c.name}
                   </option>
                 ))}
               </select>
+              {fieldErrors.clientId && (
+                <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.clientId}</p>
+              )}
             </div>
           )}
 
@@ -268,13 +334,24 @@ const BranchesPage = () => {
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">Phone Number *</label>
               <input
-                type="text"
+                type="tel"
+                inputMode="numeric"
+                maxLength={10}
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="+919123456780"
+                onChange={(e) => {
+                  const formatted = formatPhoneInput(e.target.value);
+                  setFormData({ ...formData, phone: formatted });
+                  if (fieldErrors.phone) setFieldErrors({ ...fieldErrors, phone: '' });
+                }}
+                placeholder="10-digit mobile (e.g. 9876543210)"
                 required
-                className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                className={`w-full bg-dark-900 border ${
+                  fieldErrors.phone ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-500'
+                } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors font-mono`}
               />
+              {fieldErrors.phone && (
+                <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.phone}</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">Status</label>
@@ -293,12 +370,21 @@ const BranchesPage = () => {
             <label className="block text-xs font-semibold text-slate-300 mb-1">Address *</label>
             <input
               type="text"
+              maxLength={250}
               value={formData.address}
-              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, address: e.target.value });
+                if (fieldErrors.address) setFieldErrors({ ...fieldErrors, address: '' });
+              }}
               placeholder="e.g. Shop 12, Main Street, Downtown"
               required
-              className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500"
+              className={`w-full bg-dark-900 border ${
+                fieldErrors.address ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-500'
+              } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors`}
             />
+            {fieldErrors.address && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.address}</p>
+            )}
           </div>
 
           <div className="pt-2 flex items-center justify-end gap-2 border-t border-dark-700/60 mt-4">

@@ -7,6 +7,11 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorAlert from '../../components/common/ErrorAlert';
 import EmptyState from '../../components/common/EmptyState';
 import Modal from '../../components/common/Modal';
+import {
+  validateTextLength,
+  validateAmount,
+  validateRequired,
+} from '../../utils/validation';
 
 const MaintenancePage = () => {
   const { user } = useAuth();
@@ -18,6 +23,7 @@ const MaintenancePage = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [completingId, setCompletingId] = useState(null);
 
   const [formData, setFormData] = useState({
@@ -65,13 +71,33 @@ const MaintenancePage = () => {
       cost: '',
     });
     setModalError('');
+    setFieldErrors({});
     setModalOpen(true);
+  };
+
+  const validateAll = () => {
+    const errors = {};
+    const vehErr = validateRequired(formData.vehicleId, 'Vehicle');
+    if (vehErr) errors.vehicleId = vehErr;
+
+    const descErr = validateTextLength(formData.description, 'Maintenance description', 5, 250);
+    if (descErr) errors.description = descErr;
+
+    if (formData.cost !== '' && formData.cost !== undefined && formData.cost !== null) {
+      const costErr = validateAmount(formData.cost, 'Estimated cost', 0);
+      if (costErr) errors.cost = costErr;
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.vehicleId || !formData.description.trim()) {
-      setModalError('Vehicle and Description are required.');
+    setModalError('');
+
+    if (!validateAll()) {
+      setModalError('Please fix the errors indicated below.');
       return;
     }
 
@@ -88,7 +114,11 @@ const MaintenancePage = () => {
       fetchVehicles();
     } catch (err) {
       console.error('Error scheduling maintenance:', err);
-      setModalError(err.response?.data?.message || 'Failed to schedule maintenance.');
+      const msg = err.response?.data?.message || 'Failed to schedule maintenance.';
+      setModalError(msg);
+      if (err.response?.data?.errors) {
+        setFieldErrors(err.response.data.errors);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -251,28 +281,49 @@ const MaintenancePage = () => {
             <label className="block text-xs font-semibold text-slate-300 mb-1">Select Vehicle *</label>
             <select
               value={formData.vehicleId}
-              onChange={(e) => setFormData({ ...formData, vehicleId: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, vehicleId: e.target.value });
+                if (fieldErrors.vehicleId) setFieldErrors({ ...fieldErrors, vehicleId: '' });
+              }}
               required
-              className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+              className={`w-full bg-dark-900 border ${
+                fieldErrors.vehicleId ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-500'
+              } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none transition-colors`}
             >
+              <option value="">Select a vehicle...</option>
               {vehicles.map((v) => (
                 <option key={v._id} value={v._id}>
                   {v.vehicleNumber} — {v.model} (Status: {v.status})
                 </option>
               ))}
             </select>
+            {fieldErrors.vehicleId && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.vehicleId}</p>
+            )}
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Issue / Description *</label>
+            <div className="flex justify-between items-center mb-1">
+              <label className="text-xs font-semibold text-slate-300">Issue / Description *</label>
+              <span className="text-[11px] text-slate-500">{formData.description.length}/250</span>
+            </div>
             <textarea
               rows="3"
+              maxLength={250}
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, description: e.target.value });
+                if (fieldErrors.description) setFieldErrors({ ...fieldErrors, description: '' });
+              }}
               placeholder="e.g. Engine oil replacement, rear brake pad wear, tire alignment"
               required
-              className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 resize-none"
+              className={`w-full bg-dark-900 border ${
+                fieldErrors.description ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-500'
+              } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none resize-none transition-colors`}
             />
+            {fieldErrors.description && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.description}</p>
+            )}
           </div>
 
           <div>
@@ -281,10 +332,18 @@ const MaintenancePage = () => {
               type="number"
               min="0"
               value={formData.cost}
-              onChange={(e) => setFormData({ ...formData, cost: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, cost: e.target.value });
+                if (fieldErrors.cost) setFieldErrors({ ...fieldErrors, cost: '' });
+              }}
               placeholder="e.g. 1200"
-              className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500"
+              className={`w-full bg-dark-900 border ${
+                fieldErrors.cost ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-500'
+              } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors`}
             />
+            {fieldErrors.cost && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.cost}</p>
+            )}
           </div>
 
           <div className="pt-2 flex items-center justify-end gap-2 border-t border-dark-700/60 mt-4">

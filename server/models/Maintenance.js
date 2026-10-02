@@ -16,6 +16,8 @@ const maintenanceSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Please describe the maintenance issue/work'],
       trim: true,
+      minlength: [5, 'Maintenance description must be at least 5 characters long'],
+      maxlength: [250, 'Maintenance description cannot exceed 250 characters'],
     },
     startDate: {
       type: Date,

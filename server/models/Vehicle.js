@@ -8,16 +8,28 @@ const vehicleSchema = new mongoose.Schema(
       unique: true,
       trim: true,
       uppercase: true,
+      minlength: [5, 'Vehicle registration number must be at least 5 characters long'],
+      maxlength: [20, 'Vehicle registration number cannot exceed 20 characters'],
     },
     vehicleType: {
       type: String,
-      enum: ['BIKE', 'SCOOTER', 'CAR', 'VAN'],
+      enum: {
+        values: ['BIKE', 'SCOOTER', 'CAR', 'VAN'],
+        message: '{VALUE} is not a valid vehicle type',
+      },
       required: [true, 'Please specify vehicle type'],
     },
     model: {
       type: String,
       required: [true, 'Please provide vehicle model'],
       trim: true,
+      minlength: [2, 'Vehicle model must be at least 2 characters long'],
+      maxlength: [50, 'Vehicle model cannot exceed 50 characters'],
+    },
+    capacity: {
+      type: Number,
+      min: [1, 'Vehicle capacity must be greater than zero'],
+      default: 1,
     },
     clientId: {
       type: mongoose.Schema.Types.ObjectId,

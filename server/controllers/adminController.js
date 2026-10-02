@@ -1,5 +1,14 @@
 const User = require('../models/User');
 const { recordAuditLog } = require('../utils/auditLogger');
+const {
+  validateName,
+  validateEmail,
+  validatePhone,
+  validatePassword,
+  validateEnum,
+  sanitizeSearchQuery,
+  sendValidationError,
+} = require('../utils/validation');
 
 // @desc    Get all Admin accounts (Platform Operations Admins)
 // @route   GET /api/v1/admins or GET /api/admins
@@ -13,11 +22,14 @@ exports.getAdmins = async (req, res, next) => {
     }
 
     if (req.query.search) {
-      filter.$or = [
-        { name: { $regex: req.query.search, $options: 'i' } },
-        { email: { $regex: req.query.search, $options: 'i' } },
-        { phone: { $regex: req.query.search, $options: 'i' } },
-      ];
+      const cleanSearch = sanitizeSearchQuery(req.query.search);
+      if (cleanSearch) {
+        filter.$or = [
+          { name: { $regex: cleanSearch, $options: 'i' } },
+          { email: { $regex: cleanSearch, $options: 'i' } },
+          { phone: { $regex: cleanSearch, $options: 'i' } },
+        ];
+      }
     }
 
     const admins = await User.find(filter)
@@ -62,40 +74,48 @@ exports.getAdmin = async (req, res, next) => {
 exports.createAdmin = async (req, res, next) => {
   try {
     const { name, email, phone, password, confirmPassword, status } = req.body;
+    const errors = {};
 
-    if (!name || !email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Name, email, and password are required',
-      });
-    }
+    const nameCheck = validateName(name, 'Full name', 2, 50);
+    if (!nameCheck.isValid) errors.name = nameCheck.error;
 
-    if (password.length < 6) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must be at least 6 characters long',
-      });
-    }
+    const emailCheck = validateEmail(email, 'Email address');
+    if (!emailCheck.isValid) errors.email = emailCheck.error;
+
+    const passwordCheck = validatePassword(password, 'Password');
+    if (!passwordCheck.isValid) errors.password = passwordCheck.error;
 
     if (confirmPassword && password !== confirmPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'Passwords do not match',
-      });
+      errors.confirmPassword = 'Passwords do not match.';
     }
 
-    const cleanEmail = email.toLowerCase().trim();
+    if (phone && phone.trim()) {
+      const phoneCheck = validatePhone(phone, 'Phone number');
+      if (!phoneCheck.isValid) errors.phone = phoneCheck.error;
+    }
+
+    if (status) {
+      const statusCheck = validateEnum(status, ['ACTIVE', 'INACTIVE', 'SUSPENDED'], 'Status');
+      if (!statusCheck.isValid) errors.status = statusCheck.error;
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return sendValidationError(res, errors, Object.values(errors)[0]);
+    }
+
+    const cleanEmail = emailCheck.value;
     const existingUser = await User.findOne({ email: cleanEmail });
     if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: 'A user with this email already exists',
-      });
+      return sendValidationError(
+        res,
+        { email: 'An account with this email already exists.' },
+        'An account with this email already exists.'
+      );
     }
 
     // Role is strictly forced to ADMIN - SUPER_ADMIN cannot create another SUPER_ADMIN
     const newAdmin = await User.create({
-      name: name.trim(),
+      name: nameCheck.value,
       email: cleanEmail,
       phone: phone ? phone.trim() : '',
       password,
@@ -148,23 +168,43 @@ exports.updateAdmin = async (req, res, next) => {
     }
 
     const { name, email, phone, status } = req.body;
+    const errors = {};
 
-    if (name) admin.name = name.trim();
-    if (phone !== undefined) admin.phone = phone.trim();
-    if (status && ['ACTIVE', 'INACTIVE', 'SUSPENDED'].includes(status)) {
-      admin.status = status;
+    if (name !== undefined) {
+      const nameCheck = validateName(name, 'Full name', 2, 50);
+      if (!nameCheck.isValid) errors.name = nameCheck.error;
+      else admin.name = nameCheck.value;
+    }
+
+    if (phone !== undefined && phone !== '') {
+      const phoneCheck = validatePhone(phone, 'Phone number');
+      if (!phoneCheck.isValid) errors.phone = phoneCheck.error;
+      else admin.phone = phoneCheck.value;
+    }
+
+    if (status !== undefined) {
+      const statusCheck = validateEnum(status, ['ACTIVE', 'INACTIVE', 'SUSPENDED'], 'Status');
+      if (!statusCheck.isValid) errors.status = statusCheck.error;
+      else admin.status = statusCheck.value;
     }
 
     if (email && email.toLowerCase().trim() !== admin.email) {
-      const cleanEmail = email.toLowerCase().trim();
-      const existing = await User.findOne({ email: cleanEmail });
-      if (existing && existing._id.toString() !== admin._id.toString()) {
-        return res.status(400).json({
-          success: false,
-          message: 'Email is already in use by another user',
-        });
+      const emailCheck = validateEmail(email, 'Email address');
+      if (!emailCheck.isValid) {
+        errors.email = emailCheck.error;
+      } else {
+        const cleanEmail = emailCheck.value;
+        const existing = await User.findOne({ email: cleanEmail });
+        if (existing && existing._id.toString() !== admin._id.toString()) {
+          errors.email = 'An account with this email already exists.';
+        } else {
+          admin.email = cleanEmail;
+        }
       }
-      admin.email = cleanEmail;
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return sendValidationError(res, errors, Object.values(errors)[0]);
     }
 
     // Explicitly maintain role as ADMIN

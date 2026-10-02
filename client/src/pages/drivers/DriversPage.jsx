@@ -21,6 +21,13 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorAlert from '../../components/common/ErrorAlert';
 import EmptyState from '../../components/common/EmptyState';
 import Modal from '../../components/common/Modal';
+import {
+  validateName,
+  validatePhone,
+  validateTextLength,
+  validateRequired,
+  formatPhoneInput,
+} from '../../utils/validation';
 
 const DriversPage = () => {
   const { user } = useAuth();
@@ -37,6 +44,7 @@ const DriversPage = () => {
   const [editingDriver, setEditingDriver] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
 
   // Delete Confirmation Modal state
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -154,6 +162,7 @@ const DriversPage = () => {
       status: 'AVAILABLE',
     });
     setModalError('');
+    setFieldErrors({});
     setModalOpen(true);
   };
 
@@ -176,6 +185,7 @@ const DriversPage = () => {
       status: drv.status,
     });
     setModalError('');
+    setFieldErrors({});
     setModalOpen(true);
   };
 
@@ -191,6 +201,27 @@ const DriversPage = () => {
     }));
   };
 
+  const validateAll = () => {
+    const errors = {};
+    const nameErr = validateName(formData.name, 'Driver Name');
+    if (nameErr) errors.name = nameErr;
+
+    const phoneErr = validatePhone(formData.phone);
+    if (phoneErr) errors.phone = phoneErr;
+
+    const licenseErr = validateTextLength(formData.licenseNumber, 'Driving License Number', 4, 30);
+    if (licenseErr) errors.licenseNumber = licenseErr;
+
+    const clientErr = validateRequired(formData.clientId, 'Client Organization');
+    if (clientErr) errors.clientId = clientErr;
+
+    const branchErr = validateRequired(formData.branchId, 'Assigned Branch');
+    if (branchErr) errors.branchId = branchErr;
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   // Submit Driver Form
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -200,13 +231,27 @@ const DriversPage = () => {
     }
     setModalError('');
 
+    if (!validateAll()) {
+      setModalError('Please fix the errors indicated below.');
+      return;
+    }
+
     try {
       setSubmitting(true);
+      const payload = {
+        name: formData.name.trim(),
+        phone: formData.phone.trim(),
+        licenseNumber: formData.licenseNumber.trim().toUpperCase(),
+        clientId: formData.clientId,
+        branchId: formData.branchId,
+        status: formData.status,
+      };
+
       if (editingDriver) {
-        const res = await api.put(`/drivers/${editingDriver._id}`, formData);
+        const res = await api.put(`/drivers/${editingDriver._id}`, payload);
         showToast(res.data.message || 'Driver updated successfully.');
       } else {
-        const res = await api.post('/drivers', formData);
+        const res = await api.post('/drivers', payload);
         showToast(res.data.message || 'Driver created successfully.');
       }
       setModalOpen(false);
@@ -214,7 +259,11 @@ const DriversPage = () => {
       await fetchDrivers();
     } catch (err) {
       console.error('Error saving driver:', err);
-      setModalError(err.response?.data?.message || 'Failed to save driver.');
+      const msg = err.response?.data?.message || 'Failed to save driver.';
+      setModalError(msg);
+      if (err.response?.data?.errors) {
+        setFieldErrors(err.response.data.errors);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -361,6 +410,7 @@ const DriversPage = () => {
           </div>
           <input
             type="text"
+            maxLength={100}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search driver name, phone, license..."
@@ -483,12 +533,21 @@ const DriversPage = () => {
               </label>
               <input
                 type="text"
+                maxLength={50}
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, name: e.target.value });
+                  if (fieldErrors.name) setFieldErrors({ ...fieldErrors, name: '' });
+                }}
                 placeholder="e.g. Rahul Sharma"
                 required
-                className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                className={`w-full bg-dark-900 border ${
+                  fieldErrors.name ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-500'
+                } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors`}
               />
+              {fieldErrors.name && (
+                <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.name}</p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -497,13 +556,24 @@ const DriversPage = () => {
                   Phone Number *
                 </label>
                 <input
-                  type="text"
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={10}
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="+919876543210"
+                  onChange={(e) => {
+                    const formatted = formatPhoneInput(e.target.value);
+                    setFormData({ ...formData, phone: formatted });
+                    if (fieldErrors.phone) setFieldErrors({ ...fieldErrors, phone: '' });
+                  }}
+                  placeholder="10-digit mobile (e.g. 9876543210)"
                   required
-                  className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono"
+                  className={`w-full bg-dark-900 border ${
+                    fieldErrors.phone ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-500'
+                  } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors font-mono`}
                 />
+                {fieldErrors.phone && (
+                  <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.phone}</p>
+                )}
               </div>
 
               <div>
@@ -528,14 +598,21 @@ const DriversPage = () => {
               </label>
               <input
                 type="text"
+                maxLength={30}
                 value={formData.licenseNumber}
-                onChange={(e) =>
-                  setFormData({ ...formData, licenseNumber: e.target.value.toUpperCase() })
-                }
+                onChange={(e) => {
+                  setFormData({ ...formData, licenseNumber: e.target.value.toUpperCase() });
+                  if (fieldErrors.licenseNumber) setFieldErrors({ ...fieldErrors, licenseNumber: '' });
+                }}
                 placeholder="e.g. DL-MH12-98765"
                 required
-                className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm font-mono text-slate-100 placeholder-slate-500 uppercase focus:outline-none focus:border-amber-500"
+                className={`w-full bg-dark-900 border ${
+                  fieldErrors.licenseNumber ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-500'
+                } rounded-xl px-3.5 py-2.5 text-sm font-mono text-slate-100 placeholder-slate-500 uppercase focus:outline-none transition-colors`}
               />
+              {fieldErrors.licenseNumber && (
+                <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.licenseNumber}</p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -545,9 +622,14 @@ const DriversPage = () => {
                 </label>
                 <select
                   value={formData.clientId}
-                  onChange={(e) => handleClientChange(e.target.value)}
+                  onChange={(e) => {
+                    handleClientChange(e.target.value);
+                    if (fieldErrors.clientId) setFieldErrors({ ...fieldErrors, clientId: '' });
+                  }}
                   required
-                  className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                  className={`w-full bg-dark-900 border ${
+                    fieldErrors.clientId ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-500'
+                  } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none transition-colors`}
                 >
                   <option value="">Select Client...</option>
                   {clients.map((c) => (
@@ -556,6 +638,9 @@ const DriversPage = () => {
                     </option>
                   ))}
                 </select>
+                {fieldErrors.clientId && (
+                  <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.clientId}</p>
+                )}
               </div>
 
               <div>
@@ -564,9 +649,14 @@ const DriversPage = () => {
                 </label>
                 <select
                   value={formData.branchId}
-                  onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, branchId: e.target.value });
+                    if (fieldErrors.branchId) setFieldErrors({ ...fieldErrors, branchId: '' });
+                  }}
                   required
-                  className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                  className={`w-full bg-dark-900 border ${
+                    fieldErrors.branchId ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-500'
+                  } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none transition-colors`}
                 >
                   <option value="">Select Branch...</option>
                   {availableBranchesForForm.map((b) => (
@@ -575,6 +665,9 @@ const DriversPage = () => {
                     </option>
                   ))}
                 </select>
+                {fieldErrors.branchId && (
+                  <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.branchId}</p>
+                )}
               </div>
             </div>
 

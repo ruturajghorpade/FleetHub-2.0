@@ -21,6 +21,7 @@ import ErrorAlert from '../../components/common/ErrorAlert';
 import EmptyState from '../../components/common/EmptyState';
 import FleetHubLogo from '../../components/common/FleetHubLogo';
 import Modal from '../../components/common/Modal';
+import { validateTextLength } from '../../utils/validation';
 
 const REJECTION_REASONS = [
   'Not Available',
@@ -42,6 +43,7 @@ const DriverDashboard = () => {
   const [selectedReason, setSelectedReason] = useState(REJECTION_REASONS[0]);
   const [customReason, setCustomReason] = useState('');
   const [rejecting, setRejecting] = useState(false);
+  const [rejectFieldError, setRejectFieldError] = useState('');
 
   const fetchDriverData = async () => {
     try {
@@ -86,6 +88,15 @@ const DriverDashboard = () => {
   const handleRejectDelivery = async (e) => {
     e.preventDefault();
     if (!activeDelivery) return;
+    setRejectFieldError('');
+
+    if (selectedReason === 'Other') {
+      const err = validateTextLength(customReason, 'Rejection reason', 5, 250);
+      if (err) {
+        setRejectFieldError(err);
+        return;
+      }
+    }
 
     try {
       setRejecting(true);
@@ -100,13 +111,19 @@ const DriverDashboard = () => {
 
       if (res.data?.success) {
         setIsRejectModalOpen(false);
+        setCustomReason('');
+        setRejectFieldError('');
         setStatusSuccess('Delivery rejected. Reverted to Dispatcher queue.');
         await fetchDriverData();
         setTimeout(() => setStatusSuccess(''), 4000);
       }
     } catch (err) {
       console.error('Failed to reject delivery:', err);
-      setError(err.response?.data?.message || 'Failed to reject delivery.');
+      const backendErr = err.response?.data?.message || 'Failed to reject delivery.';
+      setError(backendErr);
+      if (err.response?.data?.errors?.reason) {
+        setRejectFieldError(err.response.data.errors.reason);
+      }
     } finally {
       setRejecting(false);
     }
@@ -463,13 +480,22 @@ const DriverDashboard = () => {
               Please specify a reason for rejecting this assignment. The delivery will return to the Dispatcher queue.
             </p>
 
+            {error && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs font-semibold">
+                {error}
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                 Reason for Rejection <span className="text-rose-400">*</span>
               </label>
               <select
                 value={selectedReason}
-                onChange={(e) => setSelectedReason(e.target.value)}
+                onChange={(e) => {
+                  setSelectedReason(e.target.value);
+                  setRejectFieldError('');
+                }}
                 className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
               >
                 {REJECTION_REASONS.map((r) => (
@@ -482,17 +508,31 @@ const DriverDashboard = () => {
 
             {selectedReason === 'Other' && (
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                  Specify Reason
-                </label>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="text-xs font-semibold text-slate-300">
+                    Specify Reason <span className="text-rose-400">*</span>
+                  </label>
+                  <span className="text-[11px] text-slate-500">{customReason.length}/250</span>
+                </div>
                 <input
                   type="text"
+                  maxLength={250}
                   value={customReason}
-                  onChange={(e) => setCustomReason(e.target.value)}
-                  placeholder="Enter rejection reason..."
+                  onChange={(e) => {
+                    setCustomReason(e.target.value);
+                    if (rejectFieldError) setRejectFieldError('');
+                  }}
+                  placeholder="e.g. Mechanical issue with front tire / Road blocked"
                   required
-                  className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                  className={`w-full bg-dark-900 border ${
+                    rejectFieldError
+                      ? 'border-rose-500 focus:border-rose-500'
+                      : 'border-dark-700 focus:border-amber-500'
+                  } rounded-xl px-3.5 py-2 text-sm text-slate-100 focus:outline-none transition-colors`}
                 />
+                {rejectFieldError && (
+                  <p className="mt-1 text-xs text-rose-400 font-medium">{rejectFieldError}</p>
+                )}
               </div>
             )}
 

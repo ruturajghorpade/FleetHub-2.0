@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Settings, User, Mail, Shield, Building2, Check } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
+import { validateName, validateEmail, validatePassword } from '../../utils/validation';
 
 const SettingsPage = () => {
   const { user, updateUser } = useAuth();
@@ -11,26 +12,54 @@ const SettingsPage = () => {
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
+
+  const validateAll = () => {
+    const errors = {};
+    const nameErr = validateName(name, 'Full Name');
+    if (nameErr) errors.name = nameErr;
+
+    const emailErr = validateEmail(email);
+    if (emailErr) errors.email = emailErr;
+
+    if (password.trim()) {
+      const passErr = validatePassword(password);
+      if (passErr) errors.password = passErr;
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     setSuccessMsg('');
     setErrorMsg('');
 
+    if (!validateAll()) {
+      setErrorMsg('Please fix the errors indicated below.');
+      return;
+    }
+
     try {
       setSaving(true);
-      const payload = { name, email };
+      const payload = { name: name.trim(), email: email.trim().toLowerCase() };
       if (password.trim()) payload.password = password.trim();
 
       const res = await api.put('/auth/profile', payload);
       if (res.data.success) {
         updateUser(res.data.data);
         setPassword('');
+        setFieldErrors({});
         setSuccessMsg('Profile updated successfully!');
       }
     } catch (err) {
       console.error('Error updating profile:', err);
-      setErrorMsg(err.response?.data?.message || 'Failed to update profile.');
+      const msg = err.response?.data?.message || 'Failed to update profile.';
+      setErrorMsg(msg);
+      if (err.response?.data?.errors) {
+        setFieldErrors(err.response.data.errors);
+      }
     } finally {
       setSaving(false);
     }
@@ -74,25 +103,47 @@ const SettingsPage = () => {
         <form onSubmit={handleUpdateProfile} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Full Name</label>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Full Name <span className="text-amber-500">*</span>
+              </label>
               <input
                 type="text"
+                maxLength={50}
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (fieldErrors.name) setFieldErrors({ ...fieldErrors, name: '' });
+                }}
                 required
-                className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                className={`w-full bg-dark-900 border ${
+                  fieldErrors.name ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-500'
+                } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none transition-colors`}
               />
+              {fieldErrors.name && (
+                <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.name}</p>
+              )}
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Email Address</label>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Email Address <span className="text-amber-500">*</span>
+              </label>
               <input
                 type="email"
+                maxLength={100}
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: '' });
+                }}
                 required
-                className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+                className={`w-full bg-dark-900 border ${
+                  fieldErrors.email ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-500'
+                } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none transition-colors`}
               />
+              {fieldErrors.email && (
+                <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.email}</p>
+              )}
             </div>
           </div>
 
@@ -103,10 +154,22 @@ const SettingsPage = () => {
             <input
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (fieldErrors.password) setFieldErrors({ ...fieldErrors, password: '' });
+              }}
               placeholder="••••••••"
-              className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500"
+              className={`w-full bg-dark-900 border ${
+                fieldErrors.password ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-500'
+              } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors`}
             />
+            {fieldErrors.password ? (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.password}</p>
+            ) : (
+              <p className="mt-1 text-[11px] text-slate-500">
+                If changing, must be at least 8 characters and contain uppercase, lowercase, number, and special character.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">

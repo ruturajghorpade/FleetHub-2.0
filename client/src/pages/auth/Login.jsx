@@ -4,8 +4,13 @@ import { ArrowRight, Lock, Mail, Eye, EyeOff } from 'lucide-react';
 import { getRoleDashboardPath, useAuth } from '../../context/AuthContext';
 import FleetHubLogo from '../../components/common/FleetHubLogo';
 
+import { validateEmail } from '../../utils/validation';
+
 const inputClass =
   'w-full rounded-xl border border-slate-700/80 bg-[#090e19] py-3 pl-11 pr-11 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/15';
+
+const inputErrorClass =
+  'w-full rounded-xl border border-rose-500 bg-[#090e19] py-3 pl-11 pr-11 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -13,6 +18,7 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -20,12 +26,23 @@ const Login = () => {
     document.title = 'FleetHub 2.0 | Smarter Logistics — Sign In';
   }, []);
 
+  const validate = () => {
+    const errs = {};
+    const emailErr = validateEmail(email, 'Email address');
+    if (emailErr) errs.email = emailErr;
+    if (!password) errs.password = 'Password is required.';
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    if (!validate()) return;
+
     setLoading(true);
     try {
-      const user = await login(email, password);
+      const user = await login(email.trim(), password);
       const targetDashboard = getRoleDashboardPath(user?.role);
       navigate(targetDashboard);
     } catch (err) {
@@ -33,6 +50,9 @@ const Login = () => {
       const msg =
         err.response?.data?.message || 'Could not sign in. Check your email and password.';
       setError(msg);
+      if (err.response?.data?.errors) {
+        setFieldErrors(err.response.data.errors);
+      }
     } finally {
       setLoading(false);
     }
@@ -42,6 +62,7 @@ const Login = () => {
     setEmail(demoEmail);
     setPassword(demoPassword);
     setError('');
+    setFieldErrors({});
   };
 
   return (
@@ -93,12 +114,24 @@ const Login = () => {
                 type="email"
                 autoComplete="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (fieldErrors.email) {
+                    setFieldErrors((prev) => ({ ...prev, email: '' }));
+                  }
+                }}
+                onBlur={() => {
+                  const err = validateEmail(email, 'Email address');
+                  if (err) setFieldErrors((prev) => ({ ...prev, email: err }));
+                }}
                 placeholder="name@restaurant.com"
                 required
-                className={inputClass}
+                className={fieldErrors.email ? inputErrorClass : inputClass}
               />
             </div>
+            {fieldErrors.email && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.email}</p>
+            )}
           </div>
 
           <div>
@@ -118,10 +151,20 @@ const Login = () => {
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (fieldErrors.password) {
+                    setFieldErrors((prev) => ({ ...prev, password: '' }));
+                  }
+                }}
+                onBlur={() => {
+                  if (!password) {
+                    setFieldErrors((prev) => ({ ...prev, password: 'Password is required.' }));
+                  }
+                }}
                 placeholder="Enter your password"
                 required
-                className={inputClass}
+                className={fieldErrors.password ? inputErrorClass : inputClass}
               />
               <button
                 type="button"
@@ -136,6 +179,9 @@ const Login = () => {
                 )}
               </button>
             </div>
+            {fieldErrors.password && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.password}</p>
+            )}
           </div>
 
           <button

@@ -22,6 +22,14 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorAlert from '../../components/common/ErrorAlert';
 import EmptyState from '../../components/common/EmptyState';
 import Modal from '../../components/common/Modal';
+import {
+  validateName,
+  validateEmail,
+  validatePhone,
+  validatePassword,
+  validateConfirmPassword,
+  formatPhoneInput,
+} from '../../utils/validation';
 
 const AdminManagementPage = () => {
   const [admins, setAdmins] = useState([]);
@@ -39,6 +47,7 @@ const AdminManagementPage = () => {
   const [selectedAdmin, setSelectedAdmin] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [successMessage, setSuccessMessage] = useState('');
 
   // Form states
@@ -105,6 +114,7 @@ const AdminManagementPage = () => {
       status: 'ACTIVE',
     });
     setModalError('');
+    setFieldErrors({});
     setIsCreateModalOpen(true);
   };
 
@@ -112,19 +122,41 @@ const AdminManagementPage = () => {
     e.preventDefault();
     setModalError('');
 
-    if (createForm.password !== createForm.confirmPassword) {
-      setModalError('Passwords do not match.');
-      return;
+    const errors = {};
+    const nameErr = validateName(createForm.name, 'Admin Name');
+    if (nameErr) errors.name = nameErr;
+
+    const emailErr = validateEmail(createForm.email);
+    if (emailErr) errors.email = emailErr;
+
+    if (createForm.phone?.trim()) {
+      const phoneErr = validatePhone(createForm.phone);
+      if (phoneErr) errors.phone = phoneErr;
     }
 
-    if (createForm.password.length < 6) {
-      setModalError('Password must be at least 6 characters long.');
+    const passErr = validatePassword(createForm.password);
+    if (passErr) errors.password = passErr;
+
+    const matchErr = validateConfirmPassword(createForm.password, createForm.confirmPassword);
+    if (matchErr) errors.confirmPassword = matchErr;
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setModalError('Please fix the errors indicated below.');
       return;
     }
 
     try {
       setSubmitting(true);
-      const res = await api.post('/admins', createForm);
+      const payload = {
+        name: createForm.name.trim(),
+        email: createForm.email.trim().toLowerCase(),
+        phone: createForm.phone?.trim() || '',
+        password: createForm.password,
+        status: createForm.status,
+      };
+
+      const res = await api.post('/admins', payload);
       if (res.data?.success) {
         setSuccessMessage('New Admin account created successfully!');
         setIsCreateModalOpen(false);
@@ -133,7 +165,11 @@ const AdminManagementPage = () => {
       }
     } catch (err) {
       console.error('Create admin error:', err);
-      setModalError(err.response?.data?.message || 'Failed to create admin.');
+      const msg = err.response?.data?.message || 'Failed to create admin.';
+      setModalError(msg);
+      if (err.response?.data?.errors) {
+        setFieldErrors(err.response.data.errors);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -149,6 +185,7 @@ const AdminManagementPage = () => {
       status: admin.status || 'ACTIVE',
     });
     setModalError('');
+    setFieldErrors({});
     setIsEditModalOpen(true);
   };
 
@@ -156,9 +193,34 @@ const AdminManagementPage = () => {
     e.preventDefault();
     setModalError('');
 
+    const errors = {};
+    const nameErr = validateName(editForm.name, 'Admin Name');
+    if (nameErr) errors.name = nameErr;
+
+    const emailErr = validateEmail(editForm.email);
+    if (emailErr) errors.email = emailErr;
+
+    if (editForm.phone?.trim()) {
+      const phoneErr = validatePhone(editForm.phone);
+      if (phoneErr) errors.phone = phoneErr;
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setModalError('Please fix the errors indicated below.');
+      return;
+    }
+
     try {
       setSubmitting(true);
-      const res = await api.put(`/admins/${selectedAdmin._id}`, editForm);
+      const payload = {
+        name: editForm.name.trim(),
+        email: editForm.email.trim().toLowerCase(),
+        phone: editForm.phone?.trim() || '',
+        status: editForm.status,
+      };
+
+      const res = await api.put(`/admins/${selectedAdmin._id}`, payload);
       if (res.data?.success) {
         setSuccessMessage('Admin details updated successfully!');
         setIsEditModalOpen(false);
@@ -167,7 +229,11 @@ const AdminManagementPage = () => {
       }
     } catch (err) {
       console.error('Update admin error:', err);
-      setModalError(err.response?.data?.message || 'Failed to update admin.');
+      const msg = err.response?.data?.message || 'Failed to update admin.';
+      setModalError(msg);
+      if (err.response?.data?.errors) {
+        setFieldErrors(err.response.data.errors);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -194,6 +260,7 @@ const AdminManagementPage = () => {
     setSelectedAdmin(admin);
     setPasswordForm({ newPassword: '', confirmPassword: '' });
     setModalError('');
+    setFieldErrors({});
     setIsPasswordModalOpen(true);
   };
 
@@ -201,19 +268,24 @@ const AdminManagementPage = () => {
     e.preventDefault();
     setModalError('');
 
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      setModalError('Passwords do not match.');
-      return;
-    }
+    const errors = {};
+    const passErr = validatePassword(passwordForm.newPassword);
+    if (passErr) errors.newPassword = passErr;
 
-    if (passwordForm.newPassword.length < 6) {
-      setModalError('Password must be at least 6 characters long.');
+    const matchErr = validateConfirmPassword(passwordForm.newPassword, passwordForm.confirmPassword);
+    if (matchErr) errors.confirmPassword = matchErr;
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setModalError('Please fix the password errors below.');
       return;
     }
 
     try {
       setSubmitting(true);
-      const res = await api.patch(`/admins/${selectedAdmin._id}/password`, passwordForm);
+      const res = await api.patch(`/admins/${selectedAdmin._id}/password`, {
+        password: passwordForm.newPassword,
+      });
       if (res.data?.success) {
         setSuccessMessage(`Password reset successfully for ${selectedAdmin.email}`);
         setIsPasswordModalOpen(false);
@@ -221,7 +293,11 @@ const AdminManagementPage = () => {
       }
     } catch (err) {
       console.error('Password reset error:', err);
-      setModalError(err.response?.data?.message || 'Failed to reset password.');
+      const msg = err.response?.data?.message || 'Failed to reset password.';
+      setModalError(msg);
+      if (err.response?.data?.errors) {
+        setFieldErrors(err.response.data.errors);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -466,12 +542,21 @@ const AdminManagementPage = () => {
             </label>
             <input
               type="text"
+              maxLength={50}
               required
               value={createForm.name}
-              onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+              onChange={(e) => {
+                setCreateForm({ ...createForm, name: e.target.value });
+                if (fieldErrors.name) setFieldErrors({ ...fieldErrors, name: '' });
+              }}
               placeholder="e.g. Rahul Sharma"
-              className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3 py-2 text-slate-100 outline-none focus:border-amber-400"
+              className={`w-full bg-dark-900 border ${
+                fieldErrors.name ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-400'
+              } rounded-xl px-3 py-2 text-slate-100 outline-none transition-colors`}
             />
+            {fieldErrors.name && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.name}</p>
+            )}
           </div>
 
           <div>
@@ -480,23 +565,43 @@ const AdminManagementPage = () => {
             </label>
             <input
               type="email"
+              maxLength={100}
               required
               value={createForm.email}
-              onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+              onChange={(e) => {
+                setCreateForm({ ...createForm, email: e.target.value });
+                if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: '' });
+              }}
               placeholder="admin@fleethub.com"
-              className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3 py-2 text-slate-100 outline-none focus:border-amber-400"
+              className={`w-full bg-dark-900 border ${
+                fieldErrors.email ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-400'
+              } rounded-xl px-3 py-2 text-slate-100 outline-none transition-colors`}
             />
+            {fieldErrors.email && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.email}</p>
+            )}
           </div>
 
           <div>
             <label className="block text-slate-300 font-semibold mb-1">Phone Number</label>
             <input
               type="tel"
+              inputMode="numeric"
+              maxLength={10}
               value={createForm.phone}
-              onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
-              placeholder="+91 99999 00001"
-              className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3 py-2 text-slate-100 outline-none focus:border-amber-400"
+              onChange={(e) => {
+                const formatted = formatPhoneInput(e.target.value);
+                setCreateForm({ ...createForm, phone: formatted });
+                if (fieldErrors.phone) setFieldErrors({ ...fieldErrors, phone: '' });
+              }}
+              placeholder="10-digit mobile (e.g. 9876543210)"
+              className={`w-full bg-dark-900 border ${
+                fieldErrors.phone ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-400'
+              } rounded-xl px-3 py-2 text-slate-100 outline-none transition-colors font-mono`}
             />
+            {fieldErrors.phone && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.phone}</p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -508,10 +613,18 @@ const AdminManagementPage = () => {
                 type="password"
                 required
                 value={createForm.password}
-                onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                onChange={(e) => {
+                  setCreateForm({ ...createForm, password: e.target.value });
+                  if (fieldErrors.password) setFieldErrors({ ...fieldErrors, password: '' });
+                }}
                 placeholder="••••••••"
-                className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3 py-2 text-slate-100 outline-none focus:border-amber-400"
+                className={`w-full bg-dark-900 border ${
+                  fieldErrors.password ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-400'
+                } rounded-xl px-3 py-2 text-slate-100 outline-none transition-colors`}
               />
+              {fieldErrors.password && (
+                <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.password}</p>
+              )}
             </div>
             <div>
               <label className="block text-slate-300 font-semibold mb-1">
@@ -521,10 +634,18 @@ const AdminManagementPage = () => {
                 type="password"
                 required
                 value={createForm.confirmPassword}
-                onChange={(e) => setCreateForm({ ...createForm, confirmPassword: e.target.value })}
+                onChange={(e) => {
+                  setCreateForm({ ...createForm, confirmPassword: e.target.value });
+                  if (fieldErrors.confirmPassword) setFieldErrors({ ...fieldErrors, confirmPassword: '' });
+                }}
                 placeholder="••••••••"
-                className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3 py-2 text-slate-100 outline-none focus:border-amber-400"
+                className={`w-full bg-dark-900 border ${
+                  fieldErrors.confirmPassword ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-400'
+                } rounded-xl px-3 py-2 text-slate-100 outline-none transition-colors`}
               />
+              {fieldErrors.confirmPassword && (
+                <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.confirmPassword}</p>
+              )}
             </div>
           </div>
 
@@ -574,35 +695,69 @@ const AdminManagementPage = () => {
           )}
 
           <div>
-            <label className="block text-slate-300 font-semibold mb-1">Admin Name</label>
+            <label className="block text-slate-300 font-semibold mb-1">
+              Admin Name <span className="text-rose-400">*</span>
+            </label>
             <input
               type="text"
+              maxLength={50}
               required
               value={editForm.name}
-              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-              className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3 py-2 text-slate-100 outline-none focus:border-amber-400"
+              onChange={(e) => {
+                setEditForm({ ...editForm, name: e.target.value });
+                if (fieldErrors.name) setFieldErrors({ ...fieldErrors, name: '' });
+              }}
+              className={`w-full bg-dark-900 border ${
+                fieldErrors.name ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-400'
+              } rounded-xl px-3 py-2 text-slate-100 outline-none transition-colors`}
             />
+            {fieldErrors.name && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.name}</p>
+            )}
           </div>
 
           <div>
-            <label className="block text-slate-300 font-semibold mb-1">Email Address</label>
+            <label className="block text-slate-300 font-semibold mb-1">
+              Email Address <span className="text-rose-400">*</span>
+            </label>
             <input
               type="email"
+              maxLength={100}
               required
               value={editForm.email}
-              onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-              className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3 py-2 text-slate-100 outline-none focus:border-amber-400"
+              onChange={(e) => {
+                setEditForm({ ...editForm, email: e.target.value });
+                if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: '' });
+              }}
+              className={`w-full bg-dark-900 border ${
+                fieldErrors.email ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-400'
+              } rounded-xl px-3 py-2 text-slate-100 outline-none transition-colors`}
             />
+            {fieldErrors.email && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.email}</p>
+            )}
           </div>
 
           <div>
             <label className="block text-slate-300 font-semibold mb-1">Phone Number</label>
             <input
               type="tel"
+              inputMode="numeric"
+              maxLength={10}
               value={editForm.phone}
-              onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-              className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3 py-2 text-slate-100 outline-none focus:border-amber-400"
+              onChange={(e) => {
+                const formatted = formatPhoneInput(e.target.value);
+                setEditForm({ ...editForm, phone: formatted });
+                if (fieldErrors.phone) setFieldErrors({ ...fieldErrors, phone: '' });
+              }}
+              placeholder="10-digit mobile (e.g. 9876543210)"
+              className={`w-full bg-dark-900 border ${
+                fieldErrors.phone ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-400'
+              } rounded-xl px-3 py-2 text-slate-100 outline-none transition-colors font-mono`}
             />
+            {fieldErrors.phone && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.phone}</p>
+            )}
           </div>
 
           <div>
@@ -658,10 +813,18 @@ const AdminManagementPage = () => {
               type="password"
               required
               value={passwordForm.newPassword}
-              onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-              placeholder="Minimum 6 characters"
-              className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3 py-2 text-slate-100 outline-none focus:border-amber-400"
+              onChange={(e) => {
+                setPasswordForm({ ...passwordForm, newPassword: e.target.value });
+                if (fieldErrors.newPassword) setFieldErrors({ ...fieldErrors, newPassword: '' });
+              }}
+              placeholder="Minimum 8 chars with upper, lower, digit & special"
+              className={`w-full bg-dark-900 border ${
+                fieldErrors.newPassword ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-400'
+              } rounded-xl px-3 py-2 text-slate-100 outline-none transition-colors`}
             />
+            {fieldErrors.newPassword && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.newPassword}</p>
+            )}
           </div>
 
           <div>
@@ -672,10 +835,18 @@ const AdminManagementPage = () => {
               type="password"
               required
               value={passwordForm.confirmPassword}
-              onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+              onChange={(e) => {
+                setPasswordForm({ ...passwordForm, confirmPassword: e.target.value });
+                if (fieldErrors.confirmPassword) setFieldErrors({ ...fieldErrors, confirmPassword: '' });
+              }}
               placeholder="Re-enter new password"
-              className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3 py-2 text-slate-100 outline-none focus:border-amber-400"
+              className={`w-full bg-dark-900 border ${
+                fieldErrors.confirmPassword ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-400'
+              } rounded-xl px-3 py-2 text-slate-100 outline-none transition-colors`}
             />
+            {fieldErrors.confirmPassword && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.confirmPassword}</p>
+            )}
           </div>
 
           <div className="pt-3 border-t border-dark-700 flex justify-end gap-2">

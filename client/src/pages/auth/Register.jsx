@@ -17,8 +17,21 @@ import {
 import { getRoleDashboardPath, useAuth } from '../../context/AuthContext';
 import FleetHubLogo from '../../components/common/FleetHubLogo';
 
+import {
+  validateName,
+  validateEmail,
+  validatePhone,
+  validatePassword,
+  validateConfirmPassword,
+  validateAddress,
+  formatPhoneInput,
+} from '../../utils/validation';
+
 const inputClass =
   'w-full rounded-xl border border-slate-700/80 bg-[#090e19] py-2.5 pl-10 pr-3.5 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/15';
+
+const inputErrorClass =
+  'w-full rounded-xl border border-rose-500 bg-[#090e19] py-2.5 pl-10 pr-3.5 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20';
 
 const selectClass =
   'w-full rounded-xl border border-slate-700/80 bg-[#090e19] py-2.5 pl-10 pr-3.5 text-sm text-slate-100 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-400/15 cursor-pointer';
@@ -31,8 +44,8 @@ const VEHICLE_OPTIONS = [
 ];
 
 const Register = () => {
-  // Public registration allows ONLY CLIENT and DRIVER
-  const [selectedRole, setSelectedRole] = useState('CLIENT');
+  // Public registration allows ONLY CLIENT
+  const selectedRole = 'CLIENT';
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -53,15 +66,9 @@ const Register = () => {
     clientAddress: '',
     branchName: '',
     branchAddress: '',
-
-    // Driver-specific fields
-    licenseNumber: '',
-    licenseExpiry: '',
-    vehicleType: 'BIKE',
-    vehicleNumber: '',
-    vehicleModel: '',
   });
 
+  const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -70,31 +77,51 @@ const Register = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    let finalVal = value;
+    if (name === 'phone') {
+      finalVal = formatPhoneInput(value);
+    }
+    setFormData((prev) => ({ ...prev, [name]: finalVal }));
+    if (fieldErrors[name]) {
+      setFieldErrors((prev) => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  const validate = () => {
+    const errs = {};
+
+    const nameErr = validateName(formData.name, 'Full name');
+    if (nameErr) errs.name = nameErr;
+
+    const emailErr = validateEmail(formData.email, 'Email address');
+    if (emailErr) errs.email = emailErr;
+
+    const phoneErr = validatePhone(formData.phone, 'Phone number');
+    if (phoneErr) errs.phone = phoneErr;
+
+    const passErr = validatePassword(formData.password, 'Password');
+    if (passErr) errs.password = passErr;
+
+    const confirmErr = validateConfirmPassword(formData.password, formData.confirmPassword);
+    if (confirmErr) errs.confirmPassword = confirmErr;
+
+    const clientNameErr = validateName(formData.clientName, 'Company / Restaurant Name', 2, 100);
+    if (clientNameErr) errs.clientName = clientNameErr;
+
+    if (formData.clientAddress && formData.clientAddress.trim()) {
+      const addrErr = validateAddress(formData.clientAddress, 'Business address', 5, 250);
+      if (addrErr) errs.clientAddress = addrErr;
+    }
+
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
-    // Validation
-    if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
-
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters long.');
-      return;
-    }
-
-    if (selectedRole === 'CLIENT' && !formData.clientName.trim()) {
-      setError('Company / Restaurant Name is required for Client registration.');
-      return;
-    }
-
-    if (selectedRole === 'DRIVER' && !formData.licenseNumber.trim()) {
-      setError('Driving License Number is required for Driver registration.');
+    if (!validate()) {
       return;
     }
 
@@ -107,31 +134,26 @@ const Register = () => {
         phone: formData.phone.trim(),
         password: formData.password,
         confirmPassword: formData.confirmPassword,
-        role: selectedRole, // strictly CLIENT or DRIVER
+        role: 'CLIENT',
+        clientName: formData.clientName.trim(),
+        clientAddress: formData.clientAddress.trim(),
       };
 
-      if (selectedRole === 'CLIENT') {
-        payload.clientName = formData.clientName.trim();
-        payload.clientAddress = formData.clientAddress.trim();
-        if (formData.branchName.trim()) payload.branchName = formData.branchName.trim();
-        if (formData.branchAddress.trim()) payload.branchAddress = formData.branchAddress.trim();
-      } else if (selectedRole === 'DRIVER') {
-        payload.licenseNumber = formData.licenseNumber.trim().toUpperCase();
-        if (formData.licenseExpiry) payload.licenseExpiry = formData.licenseExpiry;
-        if (formData.vehicleType) payload.vehicleType = formData.vehicleType;
-        if (formData.vehicleNumber) payload.vehicleNumber = formData.vehicleNumber.trim().toUpperCase();
-        if (formData.vehicleModel) payload.vehicleModel = formData.vehicleModel.trim();
-      }
+      if (formData.branchName.trim()) payload.branchName = formData.branchName.trim();
+      if (formData.branchAddress.trim()) payload.branchAddress = formData.branchAddress.trim();
 
       const registeredUser = await register(payload);
       const targetDashboard = getRoleDashboardPath(registeredUser?.role);
       navigate(targetDashboard);
     } catch (err) {
       console.error('Registration error:', err);
-      setError(
+      const msg =
         err.response?.data?.message ||
-          'Failed to create account. Please verify your details and try again.'
-      );
+        'Failed to create account. Please verify your details and try again.';
+      setError(msg);
+      if (err.response?.data?.errors) {
+        setFieldErrors(err.response.data.errors);
+      }
     } finally {
       setLoading(false);
     }
@@ -203,11 +225,18 @@ const Register = () => {
                     name="name"
                     value={formData.name}
                     onChange={handleChange}
-                    placeholder="John Doe"
+                    onBlur={() => {
+                      const err = validateName(formData.name, 'Full name');
+                      if (err) setFieldErrors((prev) => ({ ...prev, name: err }));
+                    }}
+                    placeholder="Rahul Patil"
                     required
-                    className={inputClass}
+                    className={fieldErrors.name ? inputErrorClass : inputClass}
                   />
                 </div>
+                {fieldErrors.name && (
+                  <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.name}</p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -222,11 +251,18 @@ const Register = () => {
                       name="email"
                       value={formData.email}
                       onChange={handleChange}
-                      placeholder="user@domain.com"
+                      onBlur={() => {
+                        const err = validateEmail(formData.email, 'Email address');
+                        if (err) setFieldErrors((prev) => ({ ...prev, email: err }));
+                      }}
+                      placeholder="contact@restaurant.com"
                       required
-                      className={inputClass}
+                      className={fieldErrors.email ? inputErrorClass : inputClass}
                     />
                   </div>
+                  {fieldErrors.email && (
+                    <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.email}</p>
+                  )}
                 </div>
 
                 <div>
@@ -240,11 +276,20 @@ const Register = () => {
                       name="phone"
                       value={formData.phone}
                       onChange={handleChange}
-                      placeholder="+91 98765 43210"
+                      onBlur={() => {
+                        const err = validatePhone(formData.phone, 'Phone number');
+                        if (err) setFieldErrors((prev) => ({ ...prev, phone: err }));
+                      }}
+                      placeholder="9876543210"
+                      maxLength={10}
+                      inputMode="numeric"
                       required
-                      className={inputClass}
+                      className={fieldErrors.phone ? inputErrorClass : inputClass}
                     />
                   </div>
+                  {fieldErrors.phone && (
+                    <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.phone}</p>
+                  )}
                 </div>
               </div>
 
@@ -260,9 +305,13 @@ const Register = () => {
                       name="password"
                       value={formData.password}
                       onChange={handleChange}
+                      onBlur={() => {
+                        const err = validatePassword(formData.password, 'Password');
+                        if (err) setFieldErrors((prev) => ({ ...prev, password: err }));
+                      }}
                       placeholder="••••••••"
                       required
-                      className={`${inputClass} pr-10`}
+                      className={`${fieldErrors.password ? inputErrorClass : inputClass} pr-10`}
                     />
                     <button
                       type="button"
@@ -272,6 +321,13 @@ const Register = () => {
                       {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                     </button>
                   </div>
+                  {fieldErrors.password ? (
+                    <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.password}</p>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Min 8 chars, uppercase, lowercase, number &amp; special char.
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -285,9 +341,13 @@ const Register = () => {
                       name="confirmPassword"
                       value={formData.confirmPassword}
                       onChange={handleChange}
+                      onBlur={() => {
+                        const err = validateConfirmPassword(formData.password, formData.confirmPassword);
+                        if (err) setFieldErrors((prev) => ({ ...prev, confirmPassword: err }));
+                      }}
                       placeholder="••••••••"
                       required
-                      className={`${inputClass} pr-10`}
+                      className={`${fieldErrors.confirmPassword ? inputErrorClass : inputClass} pr-10`}
                     />
                     <button
                       type="button"
@@ -297,6 +357,9 @@ const Register = () => {
                       {showConfirmPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                     </button>
                   </div>
+                  {fieldErrors.confirmPassword && (
+                    <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.confirmPassword}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -305,44 +368,60 @@ const Register = () => {
           {/* Dynamic CLIENT Fields */}
           {selectedRole === 'CLIENT' && (
             <div className="pt-2 border-t border-slate-800/80 space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                <Building2 className="w-3.5 h-3.5" /> Company / Restaurant Details
-              </h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+              <Building2 className="w-3.5 h-3.5" /> Company / Restaurant Details
+            </h3>
 
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-300">
-                  Company / Restaurant Name <span className="text-rose-400">*</span>
-                </label>
-                <div className="relative">
-                  <Building2 className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-                  <input
-                    type="text"
-                    name="clientName"
-                    value={formData.clientName}
-                    onChange={handleChange}
-                    placeholder="e.g. Domino's Pizza / Spice Garden"
-                    required
-                    className={inputClass}
-                  />
-                </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-300">
+                Company / Restaurant Name <span className="text-rose-400">*</span>
+              </label>
+              <div className="relative">
+                <Building2 className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  name="clientName"
+                  value={formData.clientName}
+                  onChange={handleChange}
+                  onBlur={() => {
+                    const err = validateName(formData.clientName, 'Company / Restaurant Name', 2, 100);
+                    if (err) setFieldErrors((prev) => ({ ...prev, clientName: err }));
+                  }}
+                  placeholder="e.g. Domino's Pizza / Spice Garden"
+                  required
+                  className={fieldErrors.clientName ? inputErrorClass : inputClass}
+                />
               </div>
+              {fieldErrors.clientName && (
+                <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.clientName}</p>
+              )}
+            </div>
 
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-300">
-                  Business Address
-                </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-                  <input
-                    type="text"
-                    name="clientAddress"
-                    value={formData.clientAddress}
-                    onChange={handleChange}
-                    placeholder="Shop 104, High Street Avenue"
-                    className={inputClass}
-                  />
-                </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-300">
+                Business Address
+              </label>
+              <div className="relative">
+                <MapPin className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  name="clientAddress"
+                  value={formData.clientAddress}
+                  onChange={handleChange}
+                  onBlur={() => {
+                    if (formData.clientAddress && formData.clientAddress.trim()) {
+                      const err = validateAddress(formData.clientAddress, 'Business address', 5, 250);
+                      if (err) setFieldErrors((prev) => ({ ...prev, clientAddress: err }));
+                    }
+                  }}
+                  placeholder="Shop 104, High Street Avenue"
+                  className={fieldErrors.clientAddress ? inputErrorClass : inputClass}
+                />
               </div>
+              {fieldErrors.clientAddress && (
+                <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.clientAddress}</p>
+              )}
+            </div>
 
               <div className="p-3 rounded-xl bg-dark-900/60 border border-dark-700/60 space-y-2.5">
                 <p className="text-[11px] font-semibold text-slate-300">

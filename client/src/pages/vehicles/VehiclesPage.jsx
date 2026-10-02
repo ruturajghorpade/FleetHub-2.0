@@ -7,6 +7,11 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorAlert from '../../components/common/ErrorAlert';
 import EmptyState from '../../components/common/EmptyState';
 import Modal from '../../components/common/Modal';
+import {
+  validateVehicleNumber,
+  validateTextLength,
+  validateRequired,
+} from '../../utils/validation';
 
 const VehiclesPage = () => {
   const { user } = useAuth();
@@ -21,6 +26,7 @@ const VehiclesPage = () => {
   const [editingVehicle, setEditingVehicle] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const [formData, setFormData] = useState({
     vehicleNumber: '',
@@ -86,6 +92,7 @@ const VehiclesPage = () => {
       status: 'AVAILABLE',
     });
     setModalError('');
+    setFieldErrors({});
     setModalOpen(true);
   };
 
@@ -99,24 +106,58 @@ const VehiclesPage = () => {
       status: veh.status,
     });
     setModalError('');
+    setFieldErrors({});
     setModalOpen(true);
+  };
+
+  const validateAll = () => {
+    const errors = {};
+    const vehErr = validateVehicleNumber(formData.vehicleNumber);
+    if (vehErr) errors.vehicleNumber = vehErr;
+
+    const modelErr = validateTextLength(formData.model, 'Model / Make', 2, 50);
+    if (modelErr) errors.model = modelErr;
+
+    const branchErr = validateRequired(formData.branchId, 'Assigned Branch');
+    if (branchErr) errors.branchId = branchErr;
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setModalError('');
+
+    if (!validateAll()) {
+      setModalError('Please fix the errors indicated below.');
+      return;
+    }
+
     try {
       setSubmitting(true);
+      const payload = {
+        vehicleNumber: formData.vehicleNumber.trim().toUpperCase(),
+        vehicleType: formData.vehicleType,
+        model: formData.model.trim(),
+        branchId: formData.branchId,
+        status: formData.status,
+      };
+
       if (editingVehicle) {
-        await api.put(`/vehicles/${editingVehicle._id}`, formData);
+        await api.put(`/vehicles/${editingVehicle._id}`, payload);
       } else {
-        await api.post('/vehicles', formData);
+        await api.post('/vehicles', payload);
       }
       setModalOpen(false);
       fetchVehicles();
     } catch (err) {
       console.error('Error saving vehicle:', err);
-      setModalError(err.response?.data?.message || 'Failed to save vehicle.');
+      const msg = err.response?.data?.message || 'Failed to save vehicle.';
+      setModalError(msg);
+      if (err.response?.data?.errors) {
+        setFieldErrors(err.response.data.errors);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -204,6 +245,7 @@ const VehiclesPage = () => {
           </div>
           <input
             type="text"
+            maxLength={100}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search vehicle number or model..."
@@ -305,12 +347,21 @@ const VehiclesPage = () => {
             </label>
             <input
               type="text"
+              maxLength={20}
               value={formData.vehicleNumber}
-              onChange={(e) => setFormData({ ...formData, vehicleNumber: e.target.value.toUpperCase() })}
+              onChange={(e) => {
+                setFormData({ ...formData, vehicleNumber: e.target.value.toUpperCase() });
+                if (fieldErrors.vehicleNumber) setFieldErrors({ ...fieldErrors, vehicleNumber: '' });
+              }}
               placeholder="e.g. MH-12-AB-1234"
               required
-              className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm font-mono text-slate-100 placeholder-slate-500 uppercase focus:outline-none focus:border-amber-500"
+              className={`w-full bg-dark-900 border ${
+                fieldErrors.vehicleNumber ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-500'
+              } rounded-xl px-3.5 py-2.5 text-sm font-mono text-slate-100 placeholder-slate-500 uppercase focus:outline-none transition-colors`}
             />
+            {fieldErrors.vehicleNumber && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.vehicleNumber}</p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -347,28 +398,46 @@ const VehiclesPage = () => {
             <label className="block text-xs font-semibold text-slate-300 mb-1">Model / Make *</label>
             <input
               type="text"
+              maxLength={50}
               value={formData.model}
-              onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, model: e.target.value });
+                if (fieldErrors.model) setFieldErrors({ ...fieldErrors, model: '' });
+              }}
               placeholder="e.g. Honda Activa 6G / Hero Splendor"
               required
-              className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500"
+              className={`w-full bg-dark-900 border ${
+                fieldErrors.model ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-500'
+              } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors`}
             />
+            {fieldErrors.model && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.model}</p>
+            )}
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1">Assigned Branch *</label>
             <select
               value={formData.branchId}
-              onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, branchId: e.target.value });
+                if (fieldErrors.branchId) setFieldErrors({ ...fieldErrors, branchId: '' });
+              }}
               required
-              className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500"
+              className={`w-full bg-dark-900 border ${
+                fieldErrors.branchId ? 'border-rose-500 focus:border-rose-500' : 'border-dark-700 focus:border-amber-500'
+              } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none transition-colors`}
             >
+              <option value="">Select Branch...</option>
               {branches.map((b) => (
                 <option key={b._id} value={b._id}>
                   {b.name}
                 </option>
               ))}
             </select>
+            {fieldErrors.branchId && (
+              <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.branchId}</p>
+            )}
           </div>
 
           <div className="pt-2 flex items-center justify-end gap-2 border-t border-dark-700/60 mt-4">

@@ -6,6 +6,16 @@ const Delivery = require('../models/Delivery');
 const { isClient } = require('../utils/roles');
 const { recordAuditLog } = require('../utils/auditLogger');
 
+const {
+  validateName,
+  validateEmail,
+  validatePhone,
+  validateAddress,
+  validatePincode,
+  validateEnum,
+  sendValidationError,
+} = require('../utils/validation');
+
 // @desc    Get all clients (or current client for CLIENT role)
 // @route   GET /api/v1/clients or GET /api/clients
 // @access  Private (SUPER_ADMIN, ADMIN, CLIENT)
@@ -59,18 +69,56 @@ exports.getClient = async (req, res, next) => {
 // @access  Private (SUPER_ADMIN, ADMIN)
 exports.createClient = async (req, res, next) => {
   try {
-    const { name, email, phone, address, status } = req.body;
+    const { name, email, phone, address, contactPerson, city, state, pincode, status } = req.body;
+    const errors = {};
 
-    const existingClient = await Client.findOne({ email });
+    const nameCheck = validateName(name, 'Client name', 2, 100);
+    if (!nameCheck.isValid) errors.name = nameCheck.error;
+
+    const emailCheck = validateEmail(email, 'Client email');
+    if (!emailCheck.isValid) errors.email = emailCheck.error;
+
+    const phoneCheck = validatePhone(phone, 'Contact phone number');
+    if (!phoneCheck.isValid) errors.phone = phoneCheck.error;
+
+    const addressCheck = validateAddress(address, 'Client address');
+    if (!addressCheck.isValid) errors.address = addressCheck.error;
+
+    if (pincode && String(pincode).trim()) {
+      const pinCheck = validatePincode(pincode, 'Pincode');
+      if (!pinCheck.isValid) errors.pincode = pinCheck.error;
+    }
+
+    if (status) {
+      const statusCheck = validateEnum(status, ['ACTIVE', 'INACTIVE'], 'Status');
+      if (!statusCheck.isValid) errors.status = statusCheck.error;
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return sendValidationError(res, errors, Object.values(errors)[0]);
+    }
+
+    const cleanEmail = emailCheck.value;
+    const cleanPhone = phoneCheck.value;
+
+    const existingClient = await Client.findOne({ email: cleanEmail });
     if (existingClient) {
-      return res.status(400).json({ success: false, message: 'Client with this email already exists' });
+      return sendValidationError(
+        res,
+        { email: 'An account with this email already exists.' },
+        'An account with this email already exists.'
+      );
     }
 
     const client = await Client.create({
-      name,
-      email,
-      phone,
-      address,
+      name: nameCheck.value,
+      email: cleanEmail,
+      phone: cleanPhone,
+      address: addressCheck.value,
+      contactPerson: contactPerson ? contactPerson.trim() : undefined,
+      city: city ? city.trim() : undefined,
+      state: state ? state.trim() : undefined,
+      pincode: pincode ? String(pincode).trim() : undefined,
       status: status || 'ACTIVE',
     });
 
@@ -101,7 +149,68 @@ exports.updateClient = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Client not found' });
     }
 
-    client = await Client.findByIdAndUpdate(req.params.id, req.body, {
+    const { name, email, phone, address, status } = req.body;
+    const errors = {};
+    const updates = {};
+
+    if (name !== undefined) {
+      const nameCheck = validateName(name, 'Client name', 2, 100);
+      if (!nameCheck.isValid) errors.name = nameCheck.error;
+      else updates.name = nameCheck.value;
+    }
+
+    if (email !== undefined) {
+      const emailCheck = validateEmail(email, 'Client email');
+      if (!emailCheck.isValid) {
+        errors.email = emailCheck.error;
+      } else {
+        const cleanEmail = emailCheck.value;
+        const existing = await Client.findOne({ email: cleanEmail, _id: { $ne: client._id } });
+        if (existing) {
+          errors.email = 'An account with this email already exists.';
+        } else {
+          updates.email = cleanEmail;
+        }
+      }
+    }
+
+    if (phone !== undefined) {
+      const phoneCheck = validatePhone(phone, 'Contact phone number');
+      if (!phoneCheck.isValid) errors.phone = phoneCheck.error;
+      else updates.phone = phoneCheck.value;
+    }
+
+    if (address !== undefined) {
+      const addressCheck = validateAddress(address, 'Client address');
+      if (!addressCheck.isValid) errors.address = addressCheck.error;
+      else updates.address = addressCheck.value;
+    }
+
+    if (req.body.pincode !== undefined) {
+      if (req.body.pincode && String(req.body.pincode).trim()) {
+        const pinCheck = validatePincode(req.body.pincode, 'Pincode');
+        if (!pinCheck.isValid) errors.pincode = pinCheck.error;
+        else updates.pincode = pinCheck.value;
+      } else {
+        updates.pincode = '';
+      }
+    }
+
+    if (req.body.contactPerson !== undefined) updates.contactPerson = req.body.contactPerson.trim();
+    if (req.body.city !== undefined) updates.city = req.body.city.trim();
+    if (req.body.state !== undefined) updates.state = req.body.state.trim();
+
+    if (status !== undefined) {
+      const statusCheck = validateEnum(status, ['ACTIVE', 'INACTIVE'], 'Status');
+      if (!statusCheck.isValid) errors.status = statusCheck.error;
+      else updates.status = statusCheck.value;
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return sendValidationError(res, errors, Object.values(errors)[0]);
+    }
+
+    client = await Client.findByIdAndUpdate(req.params.id, updates, {
       new: true,
       runValidators: true,
     });

@@ -14,6 +14,14 @@ const {
   isClientScoped,
 } = require('../utils/roles');
 const { recordAuditLog } = require('../utils/auditLogger');
+const {
+  validateName,
+  validateEmail,
+  validatePhone,
+  validatePassword,
+  validateAddress,
+  sendValidationError,
+} = require('../utils/validation');
 
 // Helper to sign JWT and return sanitized user response (never exposes password hash)
 const sendTokenResponse = (user, statusCode, res) => {
@@ -83,26 +91,46 @@ exports.register = async (req, res, next) => {
       vehicleNumber,
     } = req.body;
 
-    // 1. Basic validation
-    if (!name || !email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Name, email, and password are required.',
-      });
-    }
+    // 1. Comprehensive input validation
+    const errors = {};
 
-    if (password.length < 6) {
-      return res.status(400).json({
-        success: false,
-        message: 'Password must be at least 6 characters long.',
-      });
-    }
+    const nameCheck = validateName(name, 'Full name');
+    if (!nameCheck.isValid) errors.name = nameCheck.error;
+
+    const emailCheck = validateEmail(email, 'Email address');
+    if (!emailCheck.isValid) errors.email = emailCheck.error;
+
+    const passwordCheck = validatePassword(password, 'Password');
+    if (!passwordCheck.isValid) errors.password = passwordCheck.error;
 
     if (confirmPassword && password !== confirmPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'Passwords do not match.',
-      });
+      errors.confirmPassword = 'Passwords do not match.';
+    }
+
+    if (phone && phone.trim()) {
+      const phoneCheck = validatePhone(phone, 'Phone number');
+      if (!phoneCheck.isValid) errors.phone = phoneCheck.error;
+    }
+
+    const targetRole = role === 'CLIENT_ADMIN' ? 'CLIENT' : role;
+
+    if (targetRole === 'CLIENT') {
+      const orgName = companyName || clientName;
+      if (!orgName || !orgName.trim()) {
+        errors.clientName = 'Restaurant / Business name is required.';
+      } else if (orgName.trim().length < 2 || orgName.trim().length > 100) {
+        errors.clientName = 'Restaurant / Business name must be between 2 and 100 characters.';
+      }
+
+      const orgAddress = address || clientAddress;
+      if (orgAddress && orgAddress.trim()) {
+        const addrCheck = validateAddress(orgAddress, 'Business address');
+        if (!addrCheck.isValid) errors.clientAddress = addrCheck.error;
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return sendValidationError(res, errors, Object.values(errors)[0]);
     }
 
     // 2. Strict Role Security: The backend NEVER trusts frontend role values for privileged roles
@@ -134,9 +162,7 @@ exports.register = async (req, res, next) => {
       });
     }
 
-    // Normalize legacy CLIENT_ADMIN request to CLIENT
-    const targetRole = role === 'CLIENT_ADMIN' ? 'CLIENT' : role;
-
+    // targetRole already defined above
     if (!PUBLIC_REGISTRATION_ROLES.includes(targetRole)) {
       return res.status(400).json({
         success: false,
@@ -306,12 +332,21 @@ exports.register = async (req, res, next) => {
 exports.login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
+    const errors = {};
 
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide both email and password.',
-      });
+    if (!email || !email.trim()) {
+      errors.email = 'Email is required.';
+    } else {
+      const emailCheck = validateEmail(email, 'Email address');
+      if (!emailCheck.isValid) errors.email = emailCheck.error;
+    }
+
+    if (!password) {
+      errors.password = 'Password is required.';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return sendValidationError(res, errors, Object.values(errors)[0]);
     }
 
     const cleanEmail = email.toLowerCase().trim();
@@ -434,30 +469,47 @@ exports.updateProfile = async (req, res, next) => {
       });
     }
 
-    if (req.body.name) user.name = req.body.name.trim();
-    if (req.body.phone !== undefined) user.phone = req.body.phone.trim();
+    const errors = {};
+
+    if (req.body.name !== undefined) {
+      const nameCheck = validateName(req.body.name, 'Full name');
+      if (!nameCheck.isValid) errors.name = nameCheck.error;
+      else user.name = nameCheck.value;
+    }
+
+    if (req.body.phone !== undefined && req.body.phone !== '') {
+      const phoneCheck = validatePhone(req.body.phone, 'Phone number');
+      if (!phoneCheck.isValid) errors.phone = phoneCheck.error;
+      else user.phone = phoneCheck.value;
+    }
 
     if (req.body.email && req.body.email.toLowerCase().trim() !== user.email) {
-      const cleanEmail = req.body.email.toLowerCase().trim();
-      const existing = await User.findOne({ email: cleanEmail });
-      if (existing && existing._id.toString() !== user._id.toString()) {
-        return res.status(400).json({
-          success: false,
-          message: 'Email is already in use by another account',
-        });
+      const emailCheck = validateEmail(req.body.email, 'Email address');
+      if (!emailCheck.isValid) {
+        errors.email = emailCheck.error;
+      } else {
+        const cleanEmail = emailCheck.value;
+        const existing = await User.findOne({ email: cleanEmail });
+        if (existing && existing._id.toString() !== user._id.toString()) {
+          errors.email = 'Email is already in use by another account.';
+        } else {
+          user.email = cleanEmail;
+        }
       }
-      user.email = cleanEmail;
     }
 
     // Change Password if provided
     if (req.body.password && req.body.password.trim()) {
-      if (req.body.password.trim().length < 6) {
-        return res.status(400).json({
-          success: false,
-          message: 'Password must be at least 6 characters long',
-        });
+      const passCheck = validatePassword(req.body.password, 'New password');
+      if (!passCheck.isValid) {
+        errors.password = passCheck.error;
+      } else {
+        user.password = passCheck.value;
       }
-      user.password = req.body.password.trim();
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return sendValidationError(res, errors, Object.values(errors)[0]);
     }
 
     // Role cannot be modified from the profile endpoint
