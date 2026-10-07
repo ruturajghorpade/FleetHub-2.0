@@ -10,11 +10,12 @@ import {
   Phone,
   UserRound,
   FileText,
+  CheckCircle2,
   Calendar,
   Eye,
   EyeOff,
 } from 'lucide-react';
-import { getRoleDashboardPath, useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 import FleetHubLogo from '../../components/common/FleetHubLogo';
 
 import {
@@ -71,6 +72,7 @@ const Register = () => {
   const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const { register } = useAuth();
   const navigate = useNavigate();
@@ -119,7 +121,9 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return; // Prevent double submission
     setError('');
+    setSuccess('');
 
     if (!validate()) {
       return;
@@ -142,9 +146,37 @@ const Register = () => {
       if (formData.branchName.trim()) payload.branchName = formData.branchName.trim();
       if (formData.branchAddress.trim()) payload.branchAddress = formData.branchAddress.trim();
 
-      const registeredUser = await register(payload);
-      const targetDashboard = getRoleDashboardPath(registeredUser?.role);
-      navigate(targetDashboard);
+      const response = await register(payload);
+
+      if (response && response.success) {
+        const successMsg =
+          response.message || 'Client registration successful. Please login to continue.';
+        setSuccess(successMsg);
+
+        // Clear form state on success
+        setFormData({
+          name: '',
+          email: '',
+          phone: '',
+          password: '',
+          confirmPassword: '',
+          clientName: '',
+          clientAddress: '',
+          branchName: '',
+          branchAddress: '',
+        });
+        setFieldErrors({});
+
+        // Navigate to Login page with success state
+        navigate('/login', {
+          state: {
+            message: successMsg,
+            registeredEmail: payload.email,
+          },
+          replace: true,
+        });
+        return;
+      }
     } catch (err) {
       console.error('Registration error:', err);
       const msg =
@@ -185,6 +217,16 @@ const Register = () => {
             className="mb-5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200"
           >
             {error}
+          </div>
+        )}
+
+        {success && (
+          <div
+            role="status"
+            className="mb-5 flex items-start gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200"
+          >
+            <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-emerald-400 mt-0.5" />
+            <span>{success}</span>
           </div>
         )}
 
@@ -562,7 +604,7 @@ const Register = () => {
             to="/login"
             className="font-semibold text-amber-400 underline decoration-amber-400/50 underline-offset-2 hover:text-amber-300"
           >
-            Sign in
+            Login
           </Link>
         </p>
       </section>

@@ -46,6 +46,39 @@ const protect = async (req, res, next) => {
       });
     }
 
+    // Resolve driverId for DRIVER role
+    if (user.role === 'DRIVER') {
+      const Driver = require('../models/Driver');
+      if (!user.driverId) {
+        const driverDoc = await Driver.findOne({
+          $or: [
+            { userId: user._id },
+            { phone: user.phone },
+            { email: user.email },
+            { name: user.name },
+            ...(user.licenseNumber ? [{ licenseNumber: user.licenseNumber }] : []),
+          ],
+        });
+        if (driverDoc) {
+          user.driverId = driverDoc._id;
+          if (!driverDoc.userId) {
+            driverDoc.userId = user._id;
+            await driverDoc.save().catch(() => {});
+          }
+        }
+      }
+
+      if (user.driverId) {
+        const driverDoc = await Driver.findById(user.driverId);
+        if (driverDoc && driverDoc.status === 'INACTIVE') {
+          return res.status(403).json({
+            success: false,
+            message: 'Your account is inactive. Please contact an administrator.',
+          });
+        }
+      }
+    }
+
     req.user = user;
     next();
   } catch (error) {

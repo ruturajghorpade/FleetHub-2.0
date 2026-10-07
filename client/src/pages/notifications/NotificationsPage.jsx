@@ -11,16 +11,17 @@ const NotificationsPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = async (signal) => {
     try {
       setLoading(true);
       setError('');
-      const res = await api.get('/notifications');
+      const res = await api.get('/notifications', { signal });
       if (res.data.success) {
         setNotifications(res.data.data);
         setUnreadCount(res.data.unreadCount);
       }
     } catch (err) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
       console.error('Error fetching notifications:', err);
       setError('Failed to load notifications.');
     } finally {
@@ -29,7 +30,9 @@ const NotificationsPage = () => {
   };
 
   useEffect(() => {
-    fetchNotifications();
+    const controller = new AbortController();
+    fetchNotifications(controller.signal);
+    return () => controller.abort();
   }, []);
 
   const handleMarkAsRead = async (id) => {

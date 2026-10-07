@@ -30,6 +30,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: '',
+      set: function (v) {
+        if (!v) return '';
+        return v.replace(/^\+91/, '').replace(/[\s-]/g, '');
+      },
       validate: {
         validator: function (v) {
           if (!v) return true; // optional
@@ -69,6 +73,20 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Branch',
       default: null,
+    },
+    driverId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Driver',
+      default: null,
+    },
+    mustChangePassword: {
+      type: Boolean,
+      default: false,
+    },
+    address: {
+      type: String,
+      trim: true,
+      default: '',
     },
     // Driver-specific details
     licenseNumber: {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Lock, Mail, Eye, EyeOff } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { ArrowRight, Lock, Mail, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { getRoleDashboardPath, useAuth } from '../../context/AuthContext';
 import FleetHubLogo from '../../components/common/FleetHubLogo';
 
@@ -13,18 +13,26 @@ const inputErrorClass =
   'w-full rounded-xl border border-rose-500 bg-[#090e19] py-3 pl-11 pr-11 text-sm text-slate-100 placeholder:text-slate-500 outline-none transition focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20';
 
 const Login = () => {
-  const [email, setEmail] = useState('');
+  const location = useLocation();
+  const [email, setEmail] = useState(location.state?.registeredEmail || '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState(location.state?.message || '');
   const [fieldErrors, setFieldErrors] = useState({});
   const { login } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     document.title = 'FleetHub 2.0 | Smarter Logistics — Sign In';
-  }, []);
+    if (location.state?.message) {
+      setSuccessMessage(location.state.message);
+    }
+    if (location.state?.registeredEmail) {
+      setEmail(location.state.registeredEmail);
+    }
+  }, [location.state]);
 
   const validate = () => {
     const errs = {};
@@ -86,6 +94,19 @@ const Login = () => {
 
       <section className="relative w-full max-w-md rounded-2xl border border-slate-800 bg-[#111827]/95 px-6 py-7 shadow-2xl shadow-black/30 sm:px-8 sm:py-8">
         <h2 className="sr-only">Sign in to FleetHub</h2>
+
+        {successMessage && (
+          <div
+            role="status"
+            className="mb-5 flex items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200 shadow-md shadow-emerald-950/20"
+          >
+            <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-emerald-400 mt-0.5" />
+            <div>
+              <p className="font-semibold text-emerald-300">Registration Successful</p>
+              <p className="text-xs text-emerald-200/90 mt-0.5">{successMessage}</p>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div

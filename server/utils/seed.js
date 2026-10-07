@@ -219,12 +219,21 @@ const seedData = async () => {
     const driverUser1 = await User.create({
       name: 'Rahul Sharma',
       email: 'driver1@fleethub.com',
+      phone: driver1.phone,
       password: 'driver123',
       role: 'DRIVER',
+      status: 'ACTIVE',
+      driverId: driver1._id,
+      licenseNumber: driver1.licenseNumber,
+      mustChangePassword: false,
       clientId: dominos._id,
       branchId: dominosBranchDowntown._id,
     });
-    console.log(`👤 Driver user created: driver1@fleethub.com`);
+
+    driver1.userId = driverUser1._id;
+    driver1.email = driverUser1.email;
+    await driver1.save();
+    console.log(`👤 Driver user created: driver1@fleethub.com (linked to driver profile)`);
 
     // 8. Create Sample Deliveries
     const deliveryDelivered = await Delivery.create({

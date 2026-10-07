@@ -18,7 +18,7 @@ const validatePhone = (phone, fieldName = 'Phone number') => {
   if (!phone || typeof phone !== 'string') {
     return { isValid: false, error: `${fieldName} is required.` };
   }
-  const cleanPhone = phone.trim();
+  const cleanPhone = phone.trim().replace(/^\+91/, '').replace(/[\s-]/g, '');
   if (cleanPhone.length === 0) {
     return { isValid: false, error: `${fieldName} is required.` };
   }

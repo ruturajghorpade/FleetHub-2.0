@@ -9,8 +9,14 @@ const { isDriver, isClient, isPlatformAdmin, isSuperAdmin } = require('../utils/
 // Helper to find driver linked to a user with role DRIVER
 const getLinkedDriver = async (user) => {
   if (user.role !== 'DRIVER') return null;
+  if (user.driverId) {
+    const d = await Driver.findById(user.driverId);
+    if (d) return d;
+  }
   return await Driver.findOne({
     $or: [
+      { userId: user._id },
+      { email: user.email },
       { phone: user.phone },
       { name: user.name },
       ...(user.licenseNumber ? [{ licenseNumber: user.licenseNumber }] : []),
@@ -43,8 +49,10 @@ exports.getDashboardStats = async (req, res, next) => {
         return res.status(200).json({
           success: true,
           data: {
+            driver: null,
             todaysDeliveries: 0,
             pendingDeliveries: 0,
+            pendingAssignments: 0,
             activeDeliveries: 0,
             completedDeliveries: 0,
             deliveredOrders: 0,
@@ -53,6 +61,8 @@ exports.getDashboardStats = async (req, res, next) => {
             assignedVehicle: null,
             deliveryHistory: [],
             recentDeliveries: [],
+            currentStatus: 'AVAILABLE',
+            availability: 'AVAILABLE',
           },
         });
       }
@@ -62,6 +72,7 @@ exports.getDashboardStats = async (req, res, next) => {
       const [
         todaysDeliveries,
         activeDelivery,
+        pendingAssignments,
         deliveryHistory,
         completedDeliveries,
       ] = await Promise.all([
@@ -76,6 +87,10 @@ exports.getDashboardStats = async (req, res, next) => {
           .populate('clientId', 'name phone address')
           .populate('branchId', 'name address phone')
           .populate('vehicleId', 'vehicleNumber vehicleType model status'),
+        Delivery.countDocuments({
+          ...driverFilter,
+          status: { $in: ['DRIVER_ASSIGNED', 'ASSIGNED'] },
+        }),
         Delivery.find(driverFilter)
           .populate('clientId', 'name')
           .populate('branchId', 'name address')
@@ -95,9 +110,21 @@ exports.getDashboardStats = async (req, res, next) => {
       return res.status(200).json({
         success: true,
         data: {
+          driver: {
+            id: driver._id,
+            _id: driver._id,
+            name: driver.name,
+            phone: driver.phone,
+            email: driver.email || req.user.email,
+            licenseNumber: driver.licenseNumber,
+            licenseExpiryDate: driver.licenseExpiryDate,
+            status: driver.status,
+            availability: driver.status,
+          },
           todaysDeliveries,
           activeDeliveries: activeDelivery ? 1 : 0,
-          pendingDeliveries: activeDelivery ? 1 : 0,
+          pendingDeliveries: pendingAssignments,
+          pendingAssignments,
           completedDeliveries,
           deliveredOrders: completedDeliveries,
           cancelledOrders: 0,
@@ -105,7 +132,8 @@ exports.getDashboardStats = async (req, res, next) => {
           assignedVehicle,
           deliveryHistory,
           recentDeliveries: deliveryHistory,
-          currentStatus: activeDelivery ? activeDelivery.status : 'AVAILABLE',
+          currentStatus: activeDelivery ? activeDelivery.status : driver.status,
+          availability: driver.status,
         },
       });
     }

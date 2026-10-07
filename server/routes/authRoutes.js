@@ -7,6 +7,7 @@ const {
   getPublicClients,
   updateProfile,
   logout,
+  changePassword,
 } = require('../controllers/authController');
 const { protect, requireRole } = require('../middleware/auth');
 const { ROLES } = require('../utils/roles');
@@ -21,6 +22,7 @@ router.get('/clients', getPublicClients);
 // Protected routes
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);
+router.post('/change-password', protect, changePassword);
 router.post('/logout', protect, logout);
 
 // Users list (tenant-scoped)

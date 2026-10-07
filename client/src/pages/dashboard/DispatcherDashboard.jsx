@@ -32,15 +32,16 @@ const DispatcherDashboard = () => {
     setTimeout(() => setToast(null), 4000);
   };
 
-  const fetchDispatcherData = async () => {
+  const fetchDispatcherData = async (signal) => {
     try {
       setLoading(true);
       setError('');
-      const res = await api.get('/reports/dashboard');
+      const res = await api.get('/reports/dashboard', { signal });
       if (res.data?.success) {
         setStats(res.data.data);
       }
     } catch (err) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
       console.error('Failed to load dispatcher data:', err);
       setError('Unable to load dispatcher operations data.');
     } finally {
@@ -49,7 +50,9 @@ const DispatcherDashboard = () => {
   };
 
   useEffect(() => {
-    fetchDispatcherData();
+    const controller = new AbortController();
+    fetchDispatcherData(controller.signal);
+    return () => controller.abort();
   }, []);
 
   const handleAssigned = (updatedDelivery) => {

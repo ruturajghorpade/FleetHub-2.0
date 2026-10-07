@@ -29,6 +29,8 @@ const sendTokenResponse = (user, statusCode, res) => {
     user.clientId && user.clientId._id ? user.clientId._id : user.clientId;
   const branchIdVal =
     user.branchId && user.branchId._id ? user.branchId._id : user.branchId;
+  const driverIdVal =
+    user.driverId && user.driverId._id ? user.driverId._id : user.driverId;
 
   const token = jwt.sign(
     {
@@ -37,6 +39,7 @@ const sendTokenResponse = (user, statusCode, res) => {
       role: user.role,
       clientId: clientIdVal || null,
       branchId: branchIdVal || null,
+      driverId: driverIdVal || null,
     },
     process.env.JWT_SECRET || 'fleethub_super_secret_jwt_key_2026_mca_project',
     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
@@ -53,6 +56,9 @@ const sendTokenResponse = (user, statusCode, res) => {
       phone: user.phone || '',
       role: user.role,
       status: user.status || 'ACTIVE',
+      driverId: driverIdVal || null,
+      mustChangePassword: user.mustChangePassword || false,
+      address: user.address || '',
       clientId: clientIdVal || null,
       client: user.clientId && user.clientId._id ? user.clientId : null,
       branchId: branchIdVal || null,
@@ -176,7 +182,10 @@ exports.register = async (req, res, next) => {
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: 'Email already registered. Please sign in or use another email address.',
+        message: 'An account with this email already exists.',
+        errors: {
+          email: 'An account with this email already exists.',
+        },
       });
     }
 
@@ -320,7 +329,21 @@ exports.register = async (req, res, next) => {
       details: `Public registration completed as ${targetRole}`,
     });
 
-    sendTokenResponse(newUser, 201, res);
+    res.status(201).json({
+      success: true,
+      message: 'Client registration successful. Please login to continue.',
+      data: {
+        user: {
+          id: newUser._id,
+          _id: newUser._id,
+          name: newUser.name,
+          email: newUser.email,
+          role: newUser.role,
+          clientId: assignedClientId,
+          branchId: assignedBranchId,
+        },
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -368,8 +391,40 @@ exports.login = async (req, res, next) => {
     if (user.status === 'SUSPENDED' || user.status === 'INACTIVE') {
       return res.status(403).json({
         success: false,
-        message: 'Your account is inactive. Please contact an administrator.',
+        message: 'Your account is inactive. Please contact FleetHub administration.',
       });
+    }
+
+    // Verify linked Driver status if role is DRIVER
+    if (user.role === 'DRIVER') {
+      let driverDoc = null;
+      if (user.driverId) {
+        driverDoc = await Driver.findById(user.driverId);
+      }
+      if (!driverDoc) {
+        driverDoc = await Driver.findOne({
+          $or: [
+            { userId: user._id },
+            { phone: user.phone },
+            { email: user.email },
+            { name: user.name },
+            ...(user.licenseNumber ? [{ licenseNumber: user.licenseNumber }] : []),
+          ],
+        });
+      }
+      if (driverDoc) {
+        user.driverId = driverDoc._id;
+        if (!driverDoc.userId) {
+          driverDoc.userId = user._id;
+          await driverDoc.save().catch(() => {});
+        }
+        if (driverDoc.status === 'INACTIVE') {
+          return res.status(403).json({
+            success: false,
+            message: 'Your account is inactive. Please contact FleetHub administration.',
+          });
+        }
+      }
     }
 
     // Verify password hash
@@ -505,6 +560,7 @@ exports.updateProfile = async (req, res, next) => {
         errors.password = passCheck.error;
       } else {
         user.password = passCheck.value;
+        user.mustChangePassword = false;
       }
     }
 
@@ -531,6 +587,91 @@ exports.updateProfile = async (req, res, next) => {
       success: true,
       message: 'Profile updated successfully',
       data: updated,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Change user password (supports forced password change after temporary password)
+// @route   POST /api/v1/auth/change-password or POST /api/auth/change-password
+// @access  Private
+exports.changePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+    const errors = {};
+
+    if (!currentPassword) {
+      errors.currentPassword = 'Current password is required.';
+    }
+
+    if (!newPassword) {
+      errors.newPassword = 'New password is required.';
+    } else {
+      const passCheck = validatePassword(newPassword, 'New password');
+      if (!passCheck.isValid) errors.newPassword = passCheck.error;
+    }
+
+    if (!confirmPassword) {
+      errors.confirmPassword = 'Password confirmation is required.';
+    } else if (newPassword && newPassword !== confirmPassword) {
+      errors.confirmPassword = 'New password and confirm password do not match.';
+    }
+
+    if (currentPassword && newPassword && currentPassword === newPassword) {
+      errors.newPassword = 'New password cannot be the same as the temporary password.';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      return sendValidationError(res, errors, Object.values(errors)[0]);
+    }
+
+    const user = await User.findById(req.user.id).select('+password');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    const isMatch = await user.matchPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password is incorrect.',
+        errors: { currentPassword: 'Current password is incorrect.' },
+      });
+    }
+
+    user.password = newPassword;
+    user.mustChangePassword = false;
+    await user.save();
+
+    await recordAuditLog({
+      req,
+      userId: user._id,
+      userName: user.name,
+      userEmail: user.email,
+      role: user.role,
+      action: 'PASSWORD_CHANGED',
+      resource: 'User',
+      resourceId: user._id,
+      details: 'User successfully changed account password.',
+    });
+
+    const updatedUser = await User.findById(user._id)
+      .populate('clientId', 'name email status')
+      .populate('branchId', 'name address');
+
+    res.status(200).json({
+      success: true,
+      message: 'Password changed successfully.',
+      data: {
+        id: updatedUser._id,
+        _id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        status: updatedUser.status,
+        mustChangePassword: false,
+      },
     });
   } catch (error) {
     next(error);

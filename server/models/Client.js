@@ -22,6 +22,10 @@ const clientSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Please provide client contact phone'],
       trim: true,
+      set: function (v) {
+        if (!v) return '';
+        return v.replace(/^\+91/, '').replace(/[\s-]/g, '');
+      },
       match: [/^[6-9][0-9]{9}$/, 'Phone number must be exactly 10 digits and start with 6, 7, 8, or 9.'],
     },
     address: {

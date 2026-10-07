@@ -27,15 +27,16 @@ const SuperAdminDashboard = () => {
   const [error, setError] = useState('');
   const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
 
-  const fetchStats = async () => {
+  const fetchStats = async (signal) => {
     try {
       setLoading(true);
       setError('');
-      const res = await api.get('/reports/dashboard');
+      const res = await api.get('/reports/dashboard', { signal });
       if (res.data?.success) {
         setStats(res.data.data);
       }
     } catch (err) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
       console.error('Failed to load super admin stats:', err);
       setError('Unable to load super admin dashboard metrics.');
     } finally {
@@ -44,7 +45,9 @@ const SuperAdminDashboard = () => {
   };
 
   useEffect(() => {
-    fetchStats();
+    const controller = new AbortController();
+    fetchStats(controller.signal);
+    return () => controller.abort();
   }, []);
 
   return (

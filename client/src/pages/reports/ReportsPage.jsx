@@ -9,24 +9,29 @@ const ReportsPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const fetchReports = async () => {
+  const fetchReports = async (signal) => {
     try {
       setLoading(true);
       setError('');
-      const res = await api.get('/reports/analytics');
+      const res = await api.get('/reports/analytics', { signal });
       if (res.data.success) {
         setReport(res.data.data);
       }
     } catch (err) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
       console.error('Error fetching analytics:', err);
       setError('Failed to fetch analytics from MongoDB.');
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    fetchReports();
+    const controller = new AbortController();
+    fetchReports(controller.signal);
+    return () => controller.abort();
   }, []);
 
   const d = report?.deliveries || {};

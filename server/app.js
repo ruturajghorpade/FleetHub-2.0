@@ -77,6 +77,7 @@ mountRoute('clients', clientRoutes);
 mountRoute('branches', branchRoutes);
 mountRoute('vehicles', vehicleRoutes);
 mountRoute('drivers', driverRoutes);
+mountRoute('driver', driverRoutes);
 mountRoute('deliveries', deliveryRoutes);
 mountRoute('maintenance', maintenanceRoutes);
 mountRoute('reports', reportRoutes);

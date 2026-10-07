@@ -17,6 +17,7 @@ import AdminDashboard from './pages/dashboard/AdminDashboard';
 import DispatcherDashboard from './pages/dashboard/DispatcherDashboard';
 import ClientDashboard from './pages/dashboard/ClientDashboard';
 import DriverDashboard from './pages/dashboard/DriverDashboard';
+import DriverProfilePage from './pages/driver/DriverProfilePage';
 
 // Super Admin Protected Pages
 import AdminManagementPage from './pages/admin/AdminManagementPage';
@@ -77,6 +78,10 @@ function App() {
               {/* 5. DRIVER Routes */}
               <Route element={<ProtectedRoute allowedRoles={['DRIVER']} />}>
                 <Route path="/driver/dashboard" element={<DriverDashboard />} />
+                <Route path="/driver/deliveries" element={<DeliveriesPage />} />
+                <Route path="/driver/deliveries/:id" element={<DeliveriesPage />} />
+                <Route path="/driver/profile" element={<DriverProfilePage />} />
+                <Route path="/driver/change-password" element={<DriverProfilePage />} />
               </Route>
 
               {/* Operations Routes (Deliveries & Fleet) */}
@@ -91,7 +96,7 @@ function App() {
               <Route
                 path="/vehicles"
                 element={
-                  <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN', 'DISPATCHER', 'DRIVER']}>
+                  <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN', 'DISPATCHER']}>
                     <VehiclesPage />
                   </ProtectedRoute>
                 }

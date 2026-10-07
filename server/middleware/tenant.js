@@ -29,14 +29,9 @@ const enforceTenant = (req, res, next) => {
     return next();
   }
 
-  // DRIVER role: scoped to client organization
+  // DRIVER role: FleetHub multi-client resource. Operations are scoped by driverId.
   if (isDriver(req.user.role)) {
-    if (req.user.clientId) {
-      const cId = req.user.clientId._id || req.user.clientId;
-      req.tenantFilter = { clientId: cId };
-    } else {
-      req.tenantFilter = {};
-    }
+    req.tenantFilter = {};
     return next();
   }
 

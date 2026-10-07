@@ -13,15 +13,17 @@ const Topbar = ({ title, subtitle, mobileOpen = false, onToggleMobileMenu }) => 
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = async (signal) => {
+    if (!user) return;
     try {
       setLoadingNotifs(true);
-      const res = await api.get('/notifications');
+      const res = await api.get('/notifications', { signal });
       if (res.data.success) {
         setNotifications(res.data.data.slice(0, 5));
         setUnreadCount(res.data.unreadCount);
       }
     } catch (err) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
       console.error('Error fetching notifications:', err);
     } finally {
       setLoadingNotifs(false);
@@ -29,10 +31,17 @@ const Topbar = ({ title, subtitle, mobileOpen = false, onToggleMobileMenu }) => 
   };
 
   useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 20000);
-    return () => clearInterval(interval);
-  }, []);
+    if (!user) return;
+    const controller = new AbortController();
+    fetchNotifications(controller.signal);
+    const interval = setInterval(() => {
+      fetchNotifications();
+    }, 30000);
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
+  }, [user?._id]);
 
   const handleMarkAllRead = async () => {
     try {

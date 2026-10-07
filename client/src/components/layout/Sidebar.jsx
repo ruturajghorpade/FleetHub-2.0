@@ -19,6 +19,8 @@ import {
   CheckCircle2,
   X,
   Radio,
+  User,
+  KeyRound,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -369,16 +371,20 @@ const Sidebar = ({ mobileOpen = false, onClose }) => {
 
           <div>
             <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-              Account
+              Account &amp; Security
             </p>
             <div className="space-y-1">
+              <NavLink to="/driver/profile" className={navItemClass}>
+                <User className="w-4 h-4 text-amber-400" />
+                Driver Profile
+              </NavLink>
+              <NavLink to="/driver/change-password" className={navItemClass}>
+                <KeyRound className="w-4 h-4 text-slate-400" />
+                Change Password
+              </NavLink>
               <NavLink to="/notifications" className={navItemClass}>
                 <Bell className="w-4 h-4" />
                 Notifications
-              </NavLink>
-              <NavLink to="/settings" className={navItemClass}>
-                <Settings className="w-4 h-4" />
-                Profile &amp; Settings
               </NavLink>
             </div>
           </div>

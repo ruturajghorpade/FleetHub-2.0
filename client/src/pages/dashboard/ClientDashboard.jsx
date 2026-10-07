@@ -53,24 +53,29 @@ const ClientDashboard = () => {
     await fetchStats();
   };
 
-  const fetchStats = async () => {
+  const fetchStats = async (signal) => {
     try {
       setLoading(true);
       setError('');
-      const res = await api.get('/reports/dashboard');
+      const res = await api.get('/reports/dashboard', { signal });
       if (res.data?.success) {
         setStats(res.data.data);
       }
     } catch (err) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
       console.error('Failed to load client stats:', err);
       setError('Unable to load client dashboard metrics.');
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    fetchStats();
+    const controller = new AbortController();
+    fetchStats(controller.signal);
+    return () => controller.abort();
   }, []);
 
   const clientName = user?.client?.name || user?.clientId?.name || user?.name;
