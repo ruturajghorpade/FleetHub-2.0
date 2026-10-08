@@ -49,6 +49,7 @@ const driverSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    // FleetHub platform resource: clientId and branchId indicate current optional stationing
     clientId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Client',

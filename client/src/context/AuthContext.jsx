@@ -80,22 +80,6 @@ export const AuthProvider = ({ children }) => {
     return res.data;
   };
 
-  const acceptInvitation = async (invitationData) => {
-    const res = await api.post('/auth/accept-invitation', invitationData);
-    if (res.data.success) {
-      const { token: receivedToken, user: receivedUser } = res.data;
-      localStorage.setItem('fleethub_token', receivedToken);
-      localStorage.setItem('fleethub_user', JSON.stringify(receivedUser));
-      setToken(receivedToken);
-      setUser(receivedUser);
-      return receivedUser;
-    }
-  };
-
-  const inviteUser = async (invitePayload) => {
-    const res = await api.post('/auth/invite', invitePayload);
-    return res.data;
-  };
 
   const changePassword = async (currentPassword, newPassword, confirmPassword) => {
     const res = await api.post('/auth/change-password', {
@@ -150,8 +134,6 @@ export const AuthProvider = ({ children }) => {
         isAuthenticated: !!user,
         login,
         register,
-        acceptInvitation,
-        inviteUser,
         changePassword,
         logout,
         updateUser,

@@ -11,7 +11,7 @@ router.use(enforceTenant);
 
 router.get(
   '/dashboard',
-  requireRole(ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.CLIENT, ROLES.DRIVER),
+  requireRole(ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.DISPATCHER, ROLES.CLIENT, ROLES.DRIVER),
   getDashboardStats
 );
 

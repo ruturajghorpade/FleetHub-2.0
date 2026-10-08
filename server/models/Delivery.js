@@ -139,11 +139,32 @@ const deliverySchema = new mongoose.Schema(
   }
 );
 
-// Auto-generate orderId if not provided (e.g. FH-104829)
-deliverySchema.pre('save', function (next) {
+// Compound indexes for high-frequency queries (M-06)
+deliverySchema.index({ clientId: 1, status: 1 });
+deliverySchema.index({ driverId: 1, status: 1 });
+
+// Auto-generate collision-resistant unique orderId if not provided (e.g. FH-8293041928)
+deliverySchema.pre('save', async function (next) {
   if (!this.orderId) {
-    const randomNum = Math.floor(100000 + Math.random() * 900000);
-    this.orderId = `FH-${randomNum}`;
+    let unique = false;
+    let attempts = 0;
+    const DeliveryModel = mongoose.model('Delivery');
+
+    while (!unique && attempts < 5) {
+      const ts = Date.now().toString().slice(-6);
+      const rand = Math.floor(1000 + Math.random() * 9000);
+      const candidate = `FH-${ts}${rand}`;
+      const existing = await DeliveryModel.findOne({ orderId: candidate }).lean();
+      if (!existing) {
+        this.orderId = candidate;
+        unique = true;
+      }
+      attempts++;
+    }
+
+    if (!this.orderId) {
+      this.orderId = `FH-${Date.now()}`;
+    }
   }
   next();
 });

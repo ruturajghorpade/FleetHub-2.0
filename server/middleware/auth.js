@@ -24,10 +24,15 @@ const protect = async (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || 'fleethub_super_secret_jwt_key_2026_mca_project'
-    );
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      return res.status(500).json({
+        success: false,
+        message: 'Server configuration error: JWT_SECRET is not configured.',
+      });
+    }
+
+    const decoded = jwt.verify(token, jwtSecret);
 
     const userId = decoded.userId || decoded.id;
     const user = await User.findById(userId).select('-password');

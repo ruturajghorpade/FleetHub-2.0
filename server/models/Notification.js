@@ -51,4 +51,8 @@ const notificationSchema = new mongoose.Schema(
   }
 );
 
+// Compound indexes for high-frequency unread / scoped queries (M-06)
+notificationSchema.index({ clientId: 1, isRead: 1 });
+notificationSchema.index({ driverId: 1, isRead: 1 });
+
 module.exports = mongoose.model('Notification', notificationSchema);

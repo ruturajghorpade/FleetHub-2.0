@@ -31,6 +31,7 @@ const vehicleSchema = new mongoose.Schema(
       min: [1, 'Vehicle capacity must be greater than zero'],
       default: 1,
     },
+    // FleetHub platform resource: clientId and branchId indicate optional current stationing, never exclusive ownership
     clientId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Client',

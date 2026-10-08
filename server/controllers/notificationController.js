@@ -6,16 +6,22 @@ const Notification = require('../models/Notification');
 exports.getNotifications = async (req, res, next) => {
   try {
     let filter = {};
+    const { role } = req.user;
 
-    if (req.user.role === 'CLIENT') {
+    if (role === 'CLIENT' || role === 'CLIENT_USER') {
       filter.clientId = req.user.clientId;
-    } else if (req.user.role === 'DRIVER') {
-      filter.$or = [
-        { clientId: req.user.clientId },
-        { driverId: req.user.driverId || req.user._id },
-      ];
+    } else if (role === 'DRIVER') {
+      const driverId = req.user.driverId || req.user._id;
+      filter.driverId = driverId;
+    } else if (role === 'DISPATCHER') {
+      if (req.user.clientId) {
+        filter.clientId = req.user.clientId;
+      }
+    } else if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
+      if (req.query.clientId) {
+        filter.clientId = req.query.clientId;
+      }
     }
-    // ADMIN can see all notifications
 
     const notifications = await Notification.find(filter)
       .sort({ createdAt: -1 })
@@ -47,6 +53,22 @@ exports.markAsRead = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Notification not found' });
     }
 
+    const { role } = req.user;
+    if (role === 'CLIENT' || role === 'CLIENT_USER') {
+      if (!req.user.clientId || !notification.clientId || notification.clientId.toString() !== req.user.clientId.toString()) {
+        return res.status(403).json({ success: false, message: 'Not authorized to access this notification' });
+      }
+    } else if (role === 'DRIVER') {
+      const driverId = (req.user.driverId || req.user._id).toString();
+      if (!notification.driverId || notification.driverId.toString() !== driverId) {
+        return res.status(403).json({ success: false, message: 'Not authorized to access this notification' });
+      }
+    } else if (role === 'DISPATCHER') {
+      if (req.user.clientId && (!notification.clientId || notification.clientId.toString() !== req.user.clientId.toString())) {
+        return res.status(403).json({ success: false, message: 'Not authorized to access this notification' });
+      }
+    }
+
     notification.isRead = true;
     await notification.save();
 
@@ -65,8 +87,25 @@ exports.markAsRead = async (req, res, next) => {
 exports.markAllAsRead = async (req, res, next) => {
   try {
     let filter = {};
-    if (req.user.role === 'CLIENT') {
+    const { role } = req.user;
+
+    if (role === 'CLIENT' || role === 'CLIENT_USER') {
+      if (!req.user.clientId) {
+        return res.status(400).json({ success: false, message: 'No client associated with user' });
+      }
       filter.clientId = req.user.clientId;
+    } else if (role === 'DRIVER') {
+      const driverId = req.user.driverId || req.user._id;
+      filter.driverId = driverId;
+    } else if (role === 'DISPATCHER') {
+      if (req.user.clientId) {
+        filter.clientId = req.user.clientId;
+      } else {
+        filter.driverId = null;
+      }
+    } else if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
+      filter.clientId = null;
+      filter.driverId = null;
     }
 
     await Notification.updateMany(filter, { isRead: true });

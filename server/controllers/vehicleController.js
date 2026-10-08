@@ -11,19 +11,7 @@ const {
   sanitizeSearchQuery,
   sendValidationError,
 } = require('../utils/validation');
-
-// Helper to find driver linked to a user with role DRIVER
-const getLinkedDriverId = async (user) => {
-  if (user.role !== 'DRIVER') return null;
-  const driver = await Driver.findOne({
-    $or: [
-      { phone: user.phone },
-      { name: user.name },
-      ...(user.licenseNumber ? [{ licenseNumber: user.licenseNumber }] : []),
-    ],
-  });
-  return driver ? driver._id : null;
-};
+const { getLinkedDriverId } = require('../utils/driverLinker');
 
 // @desc    Get all vehicles (FleetHub resources)
 // @route   GET /api/v1/vehicles or GET /api/vehicles

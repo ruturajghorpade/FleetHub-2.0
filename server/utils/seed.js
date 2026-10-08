@@ -14,6 +14,12 @@ const AuditLog = require('../models/AuditLog');
 
 const seedData = async () => {
   try {
+    // SECURITY GUARD: Prohibit seeding in production environments
+    if (process.env.NODE_ENV === 'production') {
+      console.error('❌ CRITICAL SECURITY ERROR: Database seeding is strictly prohibited in production.');
+      process.exit(1);
+    }
+
     const mongoUri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/fleethub';
     await mongoose.connect(mongoUri);
     console.log(`📡 Connected to MongoDB for seeding: ${mongoUri}`);

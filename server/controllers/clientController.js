@@ -242,10 +242,12 @@ exports.deleteClient = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Client not found' });
     }
 
-    // Clean up dependent resources
+    // Clean up client-owned resources and disassociate shared FleetHub platform resources (H-06, L-06)
     await Branch.deleteMany({ clientId: client._id });
-    await Vehicle.deleteMany({ clientId: client._id });
-    await Driver.deleteMany({ clientId: client._id });
+    // Vehicles & Drivers are FleetHub platform resources — unassign them rather than deleting
+    await Vehicle.updateMany({ clientId: client._id }, { $set: { clientId: null, branchId: null } });
+    await Driver.updateMany({ clientId: client._id }, { $set: { clientId: null, branchId: null } });
+    await User.updateMany({ clientId: client._id, role: 'DRIVER' }, { $set: { clientId: null, branchId: null } });
     await Delivery.deleteMany({ clientId: client._id });
     await client.deleteOne();
 

@@ -30,9 +30,9 @@ app.use(
   })
 );
 
-// Body parser
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Body parser with explicit production safety limits (L-08)
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Disable caching for all API endpoints to guarantee live database synchronization
 app.use('/api', (req, res, next) => {
@@ -48,15 +48,11 @@ if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('dev'));
 }
 
+// Canonical API v1 router
+const apiV1 = express.Router();
+
 // Health check endpoint
-app.get('/api/v1/health', (req, res) => {
-  res.status(200).json({
-    status: 'online',
-    system: 'FleetHub Food Delivery Fleet Management API',
-    timestamp: new Date(),
-  });
-});
-app.get('/api/health', (req, res) => {
+apiV1.get('/health', (req, res) => {
   res.status(200).json({
     status: 'online',
     system: 'FleetHub Food Delivery Fleet Management API',
@@ -64,24 +60,25 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Mount routers at both /api/v1 and /api for full path compatibility
-const mountRoute = (path, router) => {
-  app.use(`/api/v1/${path}`, router);
-  app.use(`/api/${path}`, router);
-};
+// Canonical route mounts
+apiV1.use('/auth', authRoutes);
+apiV1.use('/admins', adminRoutes);
+apiV1.use('/audit-logs', auditRoutes);
+apiV1.use('/clients', clientRoutes);
+apiV1.use('/branches', branchRoutes);
+apiV1.use('/vehicles', vehicleRoutes);
+apiV1.use('/drivers', driverRoutes);
+apiV1.use('/driver', driverRoutes);
+apiV1.use('/deliveries', deliveryRoutes);
+apiV1.use('/maintenance', maintenanceRoutes);
+apiV1.use('/reports', reportRoutes);
+apiV1.use('/notifications', notificationRoutes);
 
-mountRoute('auth', authRoutes);
-mountRoute('admins', adminRoutes);
-mountRoute('audit-logs', auditRoutes);
-mountRoute('clients', clientRoutes);
-mountRoute('branches', branchRoutes);
-mountRoute('vehicles', vehicleRoutes);
-mountRoute('drivers', driverRoutes);
-mountRoute('driver', driverRoutes);
-mountRoute('deliveries', deliveryRoutes);
-mountRoute('maintenance', maintenanceRoutes);
-mountRoute('reports', reportRoutes);
-mountRoute('notifications', notificationRoutes);
+// Authoritative API mount
+app.use('/api/v1', apiV1);
+
+// Backward compatibility alias: route legacy /api requests to canonical apiV1 router
+app.use('/api', apiV1);
 
 // Catch 404 routes
 app.use('*', (req, res) => {

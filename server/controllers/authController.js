@@ -5,7 +5,6 @@ const Client = require('../models/Client');
 const Branch = require('../models/Branch');
 const Driver = require('../models/Driver');
 const Vehicle = require('../models/Vehicle');
-const Invitation = require('../models/Invitation');
 const {
   ROLES,
   PUBLIC_REGISTRATION_ROLES,
@@ -32,6 +31,10 @@ const sendTokenResponse = (user, statusCode, res) => {
   const driverIdVal =
     user.driverId && user.driverId._id ? user.driverId._id : user.driverId;
 
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET environment variable is not configured');
+  }
+
   const token = jwt.sign(
     {
       id: user._id,
@@ -41,7 +44,7 @@ const sendTokenResponse = (user, statusCode, res) => {
       branchId: branchIdVal || null,
       driverId: driverIdVal || null,
     },
-    process.env.JWT_SECRET || 'fleethub_super_secret_jwt_key_2026_mca_project',
+    process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
   );
 

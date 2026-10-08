@@ -7,7 +7,10 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "seed": "node utils/seed.js",
-    "test": "node tests/api.test.js"
+    "test": "node tests/api.test.js",
+    "test:workflow": "node tests/driver_workflow.test.js",
+    "test:modal": "node tests/driver_password_modal.test.js",
+    "test:all": "node tests/api.test.js && node tests/driver_workflow.test.js && node tests/driver_password_modal.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -53,6 +53,9 @@ exports.getMaintenance = async (req, res, next) => {
     }
 
     if (isClient(req.user.role)) {
+      if (!maintenance.clientId) {
+        return res.status(403).json({ success: false, message: 'Not authorized to view this record' });
+      }
       const mClientId = (maintenance.clientId._id || maintenance.clientId).toString();
       if (mClientId !== req.user.clientId.toString()) {
         return res.status(403).json({ success: false, message: 'Not authorized to view this record' });
@@ -97,13 +100,16 @@ exports.createMaintenance = async (req, res, next) => {
     }
 
     if (isClient(req.user.role)) {
+      if (!vehicle.clientId) {
+        return res.status(403).json({ success: false, message: 'Not authorized to add maintenance for platform vehicles' });
+      }
       const vClientId = (vehicle.clientId._id || vehicle.clientId).toString();
       if (vClientId !== req.user.clientId.toString()) {
         return res.status(403).json({ success: false, message: 'Not authorized to add maintenance for this vehicle' });
       }
     }
 
-    let clientId = vehicle.clientId;
+    const clientId = vehicle.clientId ? (vehicle.clientId._id || vehicle.clientId) : null;
 
     const maintenance = await Maintenance.create({
       vehicleId,
@@ -156,16 +162,57 @@ exports.updateMaintenance = async (req, res, next) => {
     }
 
     if (isClient(req.user.role)) {
+      if (!maintenance.clientId) {
+        return res.status(403).json({ success: false, message: 'Not authorized to update this record' });
+      }
       const mClientId = (maintenance.clientId._id || maintenance.clientId).toString();
       if (mClientId !== req.user.clientId.toString()) {
         return res.status(403).json({ success: false, message: 'Not authorized to update this record' });
       }
     }
 
-    maintenance = await Maintenance.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    })
+    // Whitelist and validate update fields (H-07)
+    const allowedUpdates = {};
+    if (req.body.description !== undefined) {
+      const descCheck = validateTextLength(req.body.description, 'Maintenance description', 5, 250);
+      if (!descCheck.isValid) {
+        return res.status(400).json({ success: false, message: descCheck.error });
+      }
+      allowedUpdates.description = descCheck.value;
+    }
+
+    if (req.body.cost !== undefined) {
+      const costCheck = validateAmount(req.body.cost, 'Maintenance cost', 0, 1000000);
+      if (!costCheck.isValid) {
+        return res.status(400).json({ success: false, message: costCheck.error });
+      }
+      allowedUpdates.cost = costCheck.value;
+    }
+
+    if (req.body.startDate !== undefined) {
+      allowedUpdates.startDate = req.body.startDate;
+    }
+
+    if (req.body.endDate !== undefined) {
+      allowedUpdates.endDate = req.body.endDate;
+    }
+
+    if (req.body.status !== undefined) {
+      const validStatuses = ['PENDING', 'IN_PROGRESS', 'COMPLETED'];
+      if (!validStatuses.includes(req.body.status)) {
+        return res.status(400).json({ success: false, message: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+      }
+      allowedUpdates.status = req.body.status;
+    }
+
+    maintenance = await Maintenance.findByIdAndUpdate(
+      req.params.id,
+      { $set: allowedUpdates },
+      {
+        new: true,
+        runValidators: true,
+      }
+    )
       .populate('vehicleId', 'vehicleNumber vehicleType model status')
       .populate('clientId', 'name email');
 
@@ -197,6 +244,9 @@ exports.completeMaintenance = async (req, res, next) => {
     }
 
     if (isClient(req.user.role)) {
+      if (!maintenance.clientId) {
+        return res.status(403).json({ success: false, message: 'Not authorized to complete this record' });
+      }
       const mClientId = (maintenance.clientId._id || maintenance.clientId).toString();
       if (mClientId !== req.user.clientId.toString()) {
         return res.status(403).json({ success: false, message: 'Not authorized to complete this record' });

@@ -49,7 +49,7 @@ const DriverProfilePage = () => {
     try {
       setProfileLoading(true);
       setErrorMsg('');
-      const res = await api.get('/driver/profile');
+      const res = await api.get('/drivers/profile');
       if (res.data?.success && res.data.data) {
         const { driver, user: u, activeDelivery, assignedVehicle } = res.data.data;
         setProfileData({
@@ -88,7 +88,7 @@ const DriverProfilePage = () => {
 
     try {
       setSavingProfile(true);
-      const res = await api.patch('/driver/profile', {
+      const res = await api.patch('/drivers/profile', {
         phone: cleanPhone,
         address: address.trim(),
       });
@@ -111,7 +111,7 @@ const DriverProfilePage = () => {
     try {
       setUpdatingAvailability(true);
       setErrorMsg('');
-      const res = await api.patch('/driver/availability', { status: newStatus });
+      const res = await api.patch('/drivers/availability', { status: newStatus });
       if (res.data?.success) {
         setAvailability(newStatus);
         setProfileSuccessMsg(`Duty status updated to ${newStatus}.`);

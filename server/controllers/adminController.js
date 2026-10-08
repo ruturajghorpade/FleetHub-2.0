@@ -292,10 +292,11 @@ exports.resetAdminPassword = async (req, res, next) => {
   try {
     const { newPassword, confirmPassword } = req.body;
 
-    if (!newPassword || newPassword.length < 6) {
+    const passwordCheck = validatePassword(newPassword, 'New password');
+    if (!passwordCheck.isValid) {
       return res.status(400).json({
         success: false,
-        message: 'New password must be at least 6 characters long',
+        message: passwordCheck.error,
       });
     }
 

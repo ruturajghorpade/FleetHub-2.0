@@ -22,32 +22,7 @@ const {
   sanitizeSearchQuery,
   sendValidationError,
 } = require('../utils/validation');
-
-// Helper to find driver linked to a user with role DRIVER
-const getLinkedDriverId = async (user) => {
-  if (user.role !== 'DRIVER') return null;
-  if (user.driverId) return user.driverId;
-  const driver = await Driver.findOne({
-    $or: [
-      { userId: user._id },
-      { email: user.email },
-      { phone: user.phone },
-      { name: user.name },
-      ...(user.licenseNumber ? [{ licenseNumber: user.licenseNumber }] : []),
-    ],
-  });
-  if (driver) {
-    if (!driver.userId) {
-      driver.userId = user._id;
-      if (!driver.email && user.email) driver.email = user.email;
-      await driver.save().catch(() => {});
-    }
-    user.driverId = driver._id;
-    await user.save().catch(() => {});
-    return driver._id;
-  }
-  return null;
-};
+const { getLinkedDriverId } = require('../utils/driverLinker');
 
 // Sanitize delivery object for client (hide driver personal phone & license)
 const sanitizeDeliveryForClient = (deliveryDoc) => {

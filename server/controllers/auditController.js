@@ -1,4 +1,5 @@
 const AuditLog = require('../models/AuditLog');
+const { sanitizeSearchQuery } = require('../utils/validation');
 
 // @desc    Get system audit logs
 // @route   GET /api/v1/audit-logs or GET /api/audit-logs
@@ -20,12 +21,15 @@ exports.getAuditLogs = async (req, res, next) => {
     }
 
     if (req.query.search) {
-      filter.$or = [
-        { userName: { $regex: req.query.search, $options: 'i' } },
-        { userEmail: { $regex: req.query.search, $options: 'i' } },
-        { action: { $regex: req.query.search, $options: 'i' } },
-        { details: { $regex: req.query.search, $options: 'i' } },
-      ];
+      const cleanSearch = sanitizeSearchQuery(req.query.search);
+      if (cleanSearch) {
+        filter.$or = [
+          { userName: { $regex: cleanSearch, $options: 'i' } },
+          { userEmail: { $regex: cleanSearch, $options: 'i' } },
+          { action: { $regex: cleanSearch, $options: 'i' } },
+          { details: { $regex: cleanSearch, $options: 'i' } },
+        ];
+      }
     }
 
     const limit = parseInt(req.query.limit, 10) || 100;

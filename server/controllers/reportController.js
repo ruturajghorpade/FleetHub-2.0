@@ -5,24 +5,7 @@ const Client = require('../models/Client');
 const User = require('../models/User');
 const Maintenance = require('../models/Maintenance');
 const { isDriver, isClient, isPlatformAdmin, isSuperAdmin } = require('../utils/roles');
-
-// Helper to find driver linked to a user with role DRIVER
-const getLinkedDriver = async (user) => {
-  if (user.role !== 'DRIVER') return null;
-  if (user.driverId) {
-    const d = await Driver.findById(user.driverId);
-    if (d) return d;
-  }
-  return await Driver.findOne({
-    $or: [
-      { userId: user._id },
-      { email: user.email },
-      { phone: user.phone },
-      { name: user.name },
-      ...(user.licenseNumber ? [{ licenseNumber: user.licenseNumber }] : []),
-    ],
-  });
-};
+const { getLinkedDriver } = require('../utils/driverLinker');
 
 // @desc    Get dashboard metrics & recent deliveries tailored per role
 // @route   GET /api/v1/reports/dashboard or GET /api/reports/dashboard
@@ -268,9 +251,12 @@ exports.getDashboardStats = async (req, res, next) => {
       Delivery.countDocuments(filter),
       Delivery.countDocuments({
         ...filter,
-        status: { $in: ['ASSIGNED', 'ACCEPTED', 'PICKED_UP', 'OUT_FOR_DELIVERY'] },
+        status: { $in: ['DRIVER_ASSIGNED', 'ASSIGNED', 'ACCEPTED', 'PICKED_UP', 'OUT_FOR_DELIVERY'] },
       }),
-      Delivery.countDocuments({ ...filter, status: 'PENDING' }),
+      Delivery.countDocuments({
+        ...filter,
+        status: { $in: ['REQUESTED', 'WAITING_FOR_DRIVER', 'PENDING'] },
+      }),
       Delivery.countDocuments({ ...filter, status: 'DELIVERED' }),
       Delivery.countDocuments({ ...filter, status: 'CANCELLED' }),
       Vehicle.countDocuments({ ...filter, status: 'MAINTENANCE' }),

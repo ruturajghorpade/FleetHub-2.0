@@ -30,7 +30,7 @@ const RoleGuard = ({ allowedRoles = [], children, fallback }) => {
   }
 
   const userRole = user?.role;
-  const isSuper = userRole === 'SUPER_ADMIN' || userRole === 'ADMIN';
+  const isSuper = userRole === 'SUPER_ADMIN';
 
   const isAuthorized =
     isSuper ||

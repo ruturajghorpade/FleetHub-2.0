@@ -11,7 +11,13 @@ import Unauthorized from './pages/Unauthorized';
 import NotFoundPage from './pages/NotFoundPage';
 
 // Role Dashboards
-import Dashboard from './pages/dashboard/Dashboard';
+import { useAuth, getRoleDashboardPath } from './context/AuthContext';
+
+// Route-level dynamic role dashboard redirect (L-05)
+const RoleDashboardRedirect = () => {
+  const { user } = useAuth();
+  return <Navigate to={getRoleDashboardPath(user?.role)} replace />;
+};
 import SuperAdminDashboard from './pages/dashboard/SuperAdminDashboard';
 import AdminDashboard from './pages/dashboard/AdminDashboard';
 import DispatcherDashboard from './pages/dashboard/DispatcherDashboard';
@@ -48,7 +54,7 @@ function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               {/* Dynamic Dashboard Redirector */}
-              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/dashboard" element={<RoleDashboardRedirect />} />
 
               {/* 1. SUPER_ADMIN Routes */}
               <Route element={<ProtectedRoute allowedRoles={['SUPER_ADMIN']} />}>

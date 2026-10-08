@@ -10,7 +10,7 @@ const maintenanceSchema = new mongoose.Schema(
     clientId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Client',
-      required: [true, 'Client reference is required'],
+      default: null,
     },
     description: {
       type: String,
