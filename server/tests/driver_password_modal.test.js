@@ -58,7 +58,7 @@ const runPasswordModalTests = async () => {
     // 2. Admin creates a new Driver with temporary password
     console.log('\n>>> Step 1: Admin creates Driver with temporary credentials...');
     const uniqueId = Date.now().toString().slice(-6);
-    const testDriverEmail = `rahul.driver.${uniqueId}@fleethub.com`;
+    const testDriverEmail = `ruturaj.driver.${uniqueId}@fleethub.com`;
     const testDriverPhone = `98${uniqueId.padStart(8, '7')}`.slice(0, 10);
     const testDriverLicense = `MH12-${uniqueId}-DL`;
 
@@ -69,7 +69,7 @@ const runPasswordModalTests = async () => {
         Authorization: `Bearer ${adminToken}`,
       },
       body: JSON.stringify({
-        name: 'Rahul Patil',
+        name: 'Ruturaj Ghorpade',
         email: testDriverEmail,
         phone: testDriverPhone,
         licenseNumber: testDriverLicense,

@@ -54,7 +54,7 @@ async function runTests() {
 
   const driverRes = await request('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email: 'driver1@fleethub.com', password: 'driver123' }),
+    body: JSON.stringify({ email: 'ruturaj@fleethub.com', password: 'Ruturaj@123' }),
   });
   const driverToken = driverRes.data.token;
   console.log('   All 4 roles authenticated successfully.\n');

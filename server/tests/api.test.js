@@ -85,7 +85,7 @@ const runTests = async () => {
     const driverLoginRes = await fetch(`${baseUrl}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'driver1@fleethub.com', password: 'driver123' }),
+      body: JSON.stringify({ email: 'ruturaj@fleethub.com', password: 'Ruturaj@123' }),
     });
     const driverLoginData = await driverLoginRes.json();
     assert.strictEqual(driverLoginData.user.role, 'DRIVER');
@@ -123,9 +123,9 @@ const runTests = async () => {
 
     console.log('\n--- 4. Testing Delivery Creation & MongoDB Persistence ---');
     const newDeliveryPayload = {
-      customerName: 'Ruturaj Sandip Ghorpade',
+      customerName: 'Ruturaj',
       customerPhone: '+917709171686',
-      deliveryAddress: 'Pawarwadi',
+      deliveryAddress: 'Pune',
       orderItems: 'Pizza',
       amount: 399,
       branchId: dominosDowntownBranchId,
@@ -142,7 +142,7 @@ const runTests = async () => {
     const createDeliveryData = await createDeliveryRes.json();
     assert.strictEqual(createDeliveryRes.status, 201);
     assert.strictEqual(createDeliveryData.success, true);
-    assert.strictEqual(createDeliveryData.data.customerName, 'Ruturaj Sandip Ghorpade');
+    assert.strictEqual(createDeliveryData.data.customerName, 'Ruturaj');
     assert.ok(['REQUESTED', 'PENDING'].includes(createDeliveryData.data.status));
     assert.strictEqual(createDeliveryData.data.amount, 399);
     testDeliveryId = createDeliveryData.data._id;
@@ -154,7 +154,7 @@ const runTests = async () => {
     });
     const fetchDeliveryData = await fetchDeliveryRes.json();
     assert.strictEqual(fetchDeliveryRes.status, 200);
-    assert.strictEqual(fetchDeliveryData.data.customerName, 'Ruturaj Sandip Ghorpade');
+    assert.strictEqual(fetchDeliveryData.data.customerName, 'Ruturaj');
     console.log('✅ Delivery persistence verified via direct GET from MongoDB');
 
     console.log('\n--- 5. Testing Delivery Assignment ---');

@@ -247,7 +247,7 @@ const Login = () => {
             </button>
             <button
               type="button"
-              onClick={() => handleQuickLogin('driver1@fleethub.com', 'driver123')}
+              onClick={() => handleQuickLogin('parth@gmail.com', 'Parth@123')}
               className="px-2.5 py-1.5 rounded-lg bg-dark-900 border border-slate-800 text-slate-300 hover:border-amber-500/50 hover:text-amber-400 text-[11px] font-medium transition text-left truncate"
             >
               🛵 Driver

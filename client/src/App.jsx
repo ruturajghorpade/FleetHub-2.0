@@ -12,12 +12,6 @@ import NotFoundPage from './pages/NotFoundPage';
 
 // Role Dashboards
 import { useAuth, getRoleDashboardPath } from './context/AuthContext';
-
-// Route-level dynamic role dashboard redirect (L-05)
-const RoleDashboardRedirect = () => {
-  const { user } = useAuth();
-  return <Navigate to={getRoleDashboardPath(user?.role)} replace />;
-};
 import SuperAdminDashboard from './pages/dashboard/SuperAdminDashboard';
 import AdminDashboard from './pages/dashboard/AdminDashboard';
 import DispatcherDashboard from './pages/dashboard/DispatcherDashboard';
@@ -40,11 +34,36 @@ import ReportsPage from './pages/reports/ReportsPage';
 import NotificationsPage from './pages/notifications/NotificationsPage';
 import SettingsPage from './pages/settings/SettingsPage';
 
+// Route-level authentication and dynamic role dashboard redirect
+const RootRoleRedirect = () => {
+  const { user, loading, isAuthenticated } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0B0F19] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin"></div>
+          <p className="text-slate-400 text-sm font-medium">Authenticating FleetHub session...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || !user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Navigate to={getRoleDashboardPath(user?.role)} replace />;
+};
+
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
+          {/* Root Entrypoint: Direct Auth & Role-Based Navigation */}
+          <Route path="/" element={<RootRoleRedirect />} />
+
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -54,10 +73,11 @@ function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               {/* Dynamic Dashboard Redirector */}
-              <Route path="/dashboard" element={<RoleDashboardRedirect />} />
+              <Route path="/dashboard" element={<RootRoleRedirect />} />
 
               {/* 1. SUPER_ADMIN Routes */}
               <Route element={<ProtectedRoute allowedRoles={['SUPER_ADMIN']} />}>
+                <Route path="/super-admin" element={<Navigate to="/super-admin/dashboard" replace />} />
                 <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
                 <Route path="/super-admin/admins" element={<AdminManagementPage />} />
                 <Route path="/super-admin/audit-logs" element={<AuditLogsPage />} />
@@ -65,16 +85,19 @@ function App() {
 
               {/* 2. ADMIN Routes */}
               <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPER_ADMIN']} />}>
+                <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
                 <Route path="/admin/dashboard" element={<AdminDashboard />} />
               </Route>
 
               {/* 3. DISPATCHER Routes */}
               <Route element={<ProtectedRoute allowedRoles={['DISPATCHER', 'ADMIN', 'SUPER_ADMIN']} />}>
+                <Route path="/dispatcher" element={<Navigate to="/dispatcher/dashboard" replace />} />
                 <Route path="/dispatcher/dashboard" element={<DispatcherDashboard />} />
               </Route>
 
               {/* 4. CLIENT Routes (No Drivers or Vehicles management) */}
               <Route element={<ProtectedRoute allowedRoles={['CLIENT']} />}>
+                <Route path="/client" element={<Navigate to="/client/dashboard" replace />} />
                 <Route path="/client/dashboard" element={<ClientDashboard />} />
                 <Route path="/client/deliveries" element={<DeliveriesPage />} />
                 <Route path="/client/branches" element={<BranchesPage />} />
@@ -83,6 +106,7 @@ function App() {
 
               {/* 5. DRIVER Routes */}
               <Route element={<ProtectedRoute allowedRoles={['DRIVER']} />}>
+                <Route path="/driver" element={<Navigate to="/driver/dashboard" replace />} />
                 <Route path="/driver/dashboard" element={<DriverDashboard />} />
                 <Route path="/driver/deliveries" element={<DeliveriesPage />} />
                 <Route path="/driver/deliveries/:id" element={<DeliveriesPage />} />
@@ -159,7 +183,6 @@ function App() {
           </Route>
 
           {/* Fallbacks */}
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </BrowserRouter>
