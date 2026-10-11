@@ -105,9 +105,9 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
   const handleQuickFill = () => {
     setFormData((prev) => ({
       ...prev,
-      customerName: 'Ruturaj Sandip Ghorpade',
+      customerName: 'Ruturaj Ghorpade',
       customerPhone: '7709176186',
-      deliveryAddress: 'Pawarwadi, Near Ganpati Temple',
+      deliveryAddress: 'Near Ganpati Temple, Kothrud, Pune',
       orderItems: 'Pizza & Garlic Bread',
       amount: '299',
       branchId: prev.branchId || (branches.length > 0 ? branches[0]._id : ''),
@@ -219,8 +219,8 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
         (err.response?.status === 403
           ? 'You are not authorized to create deliveries for this client.'
           : err.response?.status === 500
-          ? 'Server error. Please try again.'
-          : err.message || 'Failed to create delivery. Please try again.');
+            ? 'Server error. Please try again.'
+            : err.message || 'Failed to create delivery. Please try again.');
       setError(backendMessage);
       if (err.response?.data?.errors) {
         setFieldErrors(err.response.data.errors);
@@ -263,13 +263,12 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
             onChange={handleChange}
             onBlur={handleBlur}
             maxLength={50}
-            placeholder="e.g. Rahul Patil"
+            placeholder="e.g. Ruturaj Ghorpade"
             required
-            className={`w-full bg-dark-900 border ${
-              fieldErrors.customerName
-                ? 'border-rose-500 focus:border-rose-500'
-                : 'border-dark-700 focus:border-amber-500'
-            } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors`}
+            className={`w-full bg-dark-900 border ${fieldErrors.customerName
+              ? 'border-rose-500 focus:border-rose-500'
+              : 'border-dark-700 focus:border-amber-500'
+              } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors`}
           />
           {fieldErrors.customerName && (
             <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.customerName}</p>
@@ -291,11 +290,10 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
             onBlur={handleBlur}
             placeholder="10-digit mobile number (e.g. 9876543210)"
             required
-            className={`w-full bg-dark-900 border ${
-              fieldErrors.customerPhone
-                ? 'border-rose-500 focus:border-rose-500'
-                : 'border-dark-700 focus:border-amber-500'
-            } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors font-mono`}
+            className={`w-full bg-dark-900 border ${fieldErrors.customerPhone
+              ? 'border-rose-500 focus:border-rose-500'
+              : 'border-dark-700 focus:border-amber-500'
+              } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors font-mono`}
           />
           {fieldErrors.customerPhone && (
             <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.customerPhone}</p>
@@ -316,11 +314,10 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
             onBlur={handleBlur}
             placeholder="Complete address (e.g. Flat 402, Green Valley Apartments, Pawarwadi)"
             required
-            className={`w-full bg-dark-900 border ${
-              fieldErrors.deliveryAddress
-                ? 'border-rose-500 focus:border-rose-500'
-                : 'border-dark-700 focus:border-amber-500'
-            } rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors resize-none`}
+            className={`w-full bg-dark-900 border ${fieldErrors.deliveryAddress
+              ? 'border-rose-500 focus:border-rose-500'
+              : 'border-dark-700 focus:border-amber-500'
+              } rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors resize-none`}
           />
           {fieldErrors.deliveryAddress && (
             <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.deliveryAddress}</p>
@@ -357,11 +354,10 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
               onChange={handleChange}
               onBlur={handleBlur}
               required
-              className={`w-full bg-dark-900 border ${
-                fieldErrors.branchId
-                  ? 'border-rose-500 focus:border-rose-500'
-                  : 'border-dark-700 focus:border-amber-500'
-              } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none transition-colors`}
+              className={`w-full bg-dark-900 border ${fieldErrors.branchId
+                ? 'border-rose-500 focus:border-rose-500'
+                : 'border-dark-700 focus:border-amber-500'
+                } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none transition-colors`}
             >
               {branches.map((b) => (
                 <option key={b._id} value={b._id}>
@@ -385,7 +381,7 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
               maxLength={150}
               value={formData.orderItems}
               onChange={handleChange}
-              placeholder="e.g. Pizza"
+              placeholder="e.g. Pizza,Burger "
               className="w-full bg-dark-900 border border-dark-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-colors"
             />
           </div>
@@ -402,11 +398,10 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
               onBlur={handleBlur}
               placeholder="299"
               required
-              className={`w-full bg-dark-900 border ${
-                fieldErrors.amount
-                  ? 'border-rose-500 focus:border-rose-500'
-                  : 'border-dark-700 focus:border-amber-500'
-              } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors`}
+              className={`w-full bg-dark-900 border ${fieldErrors.amount
+                ? 'border-rose-500 focus:border-rose-500'
+                : 'border-dark-700 focus:border-amber-500'
+                } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors`}
             />
             {fieldErrors.amount && (
               <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.amount}</p>
@@ -425,11 +420,10 @@ const DeliveryModal = ({ isOpen, onClose, onCreated, onSuccess }) => {
             onChange={handleChange}
             onBlur={handleBlur}
             placeholder="e.g. Please deliver carefully / Ring doorbell"
-            className={`w-full bg-dark-900 border ${
-              fieldErrors.deliveryNotes
-                ? 'border-rose-500 focus:border-rose-500'
-                : 'border-dark-700 focus:border-amber-500'
-            } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors`}
+            className={`w-full bg-dark-900 border ${fieldErrors.deliveryNotes
+              ? 'border-rose-500 focus:border-rose-500'
+              : 'border-dark-700 focus:border-amber-500'
+              } rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none transition-colors`}
           />
           {fieldErrors.deliveryNotes && (
             <p className="mt-1 text-xs text-rose-400 font-medium">{fieldErrors.deliveryNotes}</p>
